@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { contractExists, type ContractLookupStatus } from '@/lib/contractExists';
 import { isValidContractId } from '@/lib/stellar';
 import type { Network } from '@/types';
@@ -53,6 +53,7 @@ export default function ContractVerification({
   const id = contractId.trim();
   const checkable = isValidContractId(id);
   const state = status;
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     onOverrideChange(false);
@@ -75,7 +76,7 @@ export default function ContractVerification({
     };
     // onOverrideChange/onStatusChange are expected to be stable callbacks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, network, checkable]);
+  }, [id, network, checkable, attempt]);
 
   if (!checkable) return null;
 
@@ -116,7 +117,22 @@ export default function ContractVerification({
     return (
       <p className={`text-xs text-zinc-500 ${className}`}>
         Could not verify the deployment on {network}
-        {reason ? ` (${reason})` : ''}. Saving is not blocked.
+        {reason ? ` (${reason})` : ''}. Saving is not blocked.{' '}
+        <button
+          type="button"
+          onClick={() => setAttempt((n) => n + 1)}
+          className="underline text-zinc-400 hover:text-zinc-200"
+        >
+          Retry check
+        </button>
+      </p>
+    );
+  }
+
+  if (state === 'invalid') {
+    return (
+      <p role="alert" className={`text-xs text-red-400 ${className}`}>
+        This is not a valid contract ID{reason ? ` (${reason})` : ''}.
       </p>
     );
   }

@@ -103,7 +103,8 @@ describe('contractExists', () => {
 
   it('rejects malformed contract IDs without calling the RPC', async () => {
     await expect(contractExists('testnet', 'not-a-contract')).resolves.toEqual({
-      status: 'not_found',
+      status: 'invalid',
+      reason: 'Malformed contract ID',
     })
     expect(fetchMock()).not.toHaveBeenCalled()
   })

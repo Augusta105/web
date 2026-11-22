@@ -21,7 +21,7 @@ export function contractInstanceLedgerKey(contractId: string): string {
 /** Default Soroban RPC timeout, in milliseconds. */
 const CONTRACT_LOOKUP_TIMEOUT_MS = 8000
 
-export type ContractLookupStatus = 'found' | 'archived' | 'not_found' | 'unavailable'
+export type ContractLookupStatus = 'found' | 'archived' | 'not_found' | 'invalid' | 'unavailable'
 
 export interface ContractLookupResult {
   status: ContractLookupStatus
@@ -60,6 +60,8 @@ export function getLedgerEntriesRequest(contractId: string, id = 1): string {
  * live ledger is indistinguishable from a missing one via `getLedgerEntries`
  * alone, so it still reads as `not_found`.
  *
+ * Malformed IDs return `invalid` without calling the RPC.
+ *
  * Returns `not_found` only when the RPC answered authoritatively with no
  * entry. RPC errors, timeouts and unparsable answers return `unavailable`, so
  * a flaky endpoint never blocks the user from saving a contract.
@@ -70,7 +72,7 @@ export async function contractExists(
   { signal, timeoutMs = CONTRACT_LOOKUP_TIMEOUT_MS }: ContractExistsOptions = {}
 ): Promise<ContractLookupResult> {
   const id = contractId.trim()
-  if (!isValidContractId(id)) return { status: 'not_found' }
+  if (!isValidContractId(id)) return { status: 'invalid', reason: 'Malformed contract ID' }
 
   const controller = new AbortController()
   const onCallerAbort = () => controller.abort()
