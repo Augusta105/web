@@ -1,6 +1,3 @@
-import { WatchedContract } from '@/types'
-import { hasActiveWebhooks } from '@/lib/contractsApi'
-
 import { AlertPayload, Network, WatchedContract } from '@/types'
 import { hasActiveWebhooks } from '@/lib/contractsApi'
 
@@ -60,7 +57,6 @@ function groupKey(alert: AlertRecord | AlertPayload, groupBy: AlertGroupBy): str
     groupBy === 'network'
       ? alert.network
       : (alert as { ruleType?: string }).ruleType ?? (alert as AlertPayload).rule_triggered
-      : (alert as any).ruleType ?? (alert as AlertPayload).rule_triggered
   return value && value.trim().length > 0 ? value : 'unknown'
 }
 
@@ -110,10 +106,6 @@ export function bucketAlerts(
         ? ((alert as { timestamp: number }).timestamp)
         : toDate((alert as { createdAt?: string | Date }).createdAt ?? (alert as { timestamp?: string | number | Date }).timestamp ?? 0).getTime()
     if (Number.isNaN(time) || time === 0) continue
-      typeof (alert as any).timestamp === 'number'
-        ? (alert as any).timestamp
-        : toDate((alert as any).createdAt ?? (alert as any).timestamp).getTime()
-    if (Number.isNaN(time)) continue
 
     for (const bucket of buckets) {
       if (time >= bucket.start.getTime() && time < bucket.end.getTime()) {
@@ -155,19 +147,4 @@ export function isContractPaused(contract: { enabled?: boolean; paused?: boolean
  */
 export function countActiveWebhooks(contracts: WatchedContract[]): number {
   return contracts.filter(hasActiveWebhooks).length
- * Unifies definition of active webhooks across the application:
- * contract must be enabled and have a non-empty webhook URL.
- */
-export function countActiveWebhooks(contracts: WatchedContract[]): number {
-  return contracts.filter(hasActiveWebhooks).length
-    enabled: (contract as any).enabled ?? true,
-  })) as WatchedContract[]
-}
-
-export function isContractPaused(contract: { enabled?: boolean }): boolean {
-  return contract.enabled === false
-}
-
-export function countActiveWebhooks(contracts: Array<{ enabled?: boolean; webhook_url?: string }>): number {
-  return contracts.filter((c) => !isContractPaused(c) && Boolean(c.webhook_url)).length
 }

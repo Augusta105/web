@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useContracts } from '@/lib/useContracts'
-import { getAlerts, getNetworkDistribution } from '@/lib/storage'
 import { hasActiveWebhooks } from '@/lib/contractsApi'
 import { getAlerts, getNetworkDistribution, onAlertsChange } from '@/lib/storage'
 import ContractCard from '@/components/ContractCard'
@@ -13,102 +12,6 @@ import DashboardSkeleton from '@/components/DashboardSkeleton'
 import AlertActivityChart from '@/components/AlertActivityChart'
 import { getLatestAlertTimestamps } from '@/lib/alertSource'
 import { Network, AlertPayload } from '@/types'
-
-const DAY_MS = 24 * 60 * 60 * 1000
-const HOUR_MS = 60 * 60 * 1000
-
-interface AlertBucket {
-  label: string
-  count: number
-}
-
-function bucketAlerts(alerts: AlertPayload[], now: number, bucketMs: number, bucketCount: number): AlertBucket[] {
-  const buckets: AlertBucket[] = []
-  for (let i = bucketCount - 1; i >= 0; i--) {
-    const start = now - (i + 1) * bucketMs
-    const end = now - i * bucketMs
-    const count = alerts.filter((a) => a.timestamp > start && a.timestamp <= end).length
-    const date = new Date(end)
-    const label =
-      bucketMs === DAY_MS
-        ? date.toLocaleDateString(undefined, { weekday: 'short' })
-        : date.toLocaleTimeString(undefined, { hour: 'numeric' })
-    buckets.push({ label, count })
-  }
-  return buckets
-}
-
-function AlertActivityChart({ title, buckets }: { title: string; buckets: AlertBucket[] }) {
-  const max = Math.max(1, ...buckets.map((b) => b.count))
-  const width = 320
-  const height = 100
-  const gap = 6
-  const barWidth = (width - gap * (buckets.length - 1)) / buckets.length
-  const isHourly = buckets.length > 7
-
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-      <h2 className="text-sm font-semibold text-zinc-200">{title}</h2>
-      <svg
-        role="img"
-        aria-label={`${title} bar chart`}
-        viewBox={`0 0 ${width} ${height}`}
-        className="mt-4 w-full h-24"
-        preserveAspectRatio="none"
-      >
-        {buckets.map((bucket, i) => {
-          const barHeight = (bucket.count / max) * height
-          const x = i * (barWidth + gap)
-          const y = height - barHeight
-          return (
-            <rect
-              key={i}
-              x={x}
-              y={y}
-              width={barWidth}
-              height={barHeight}
-              rx={2}
-              className="fill-indigo-500"
-            />
-          )
-        })}
-      </svg>
-      {/* HTML axis labels to prevent stretching and overlapping */}
-      <div className="flex items-center justify-between mt-2 text-[10px] text-zinc-500 select-none">
-        {buckets.map((bucket, i) => {
-          let visibility = 'text-center'
-          if (isHourly) {
-            if (i % 6 !== 0) {
-              visibility = i % 3 === 0 ? 'hidden sm:block text-center' : 'hidden lg:block text-center'
-            }
-          }
-          return (
-            <span key={i} className={`flex-1 ${visibility}`}>
-              {bucket.label}
-            </span>
-          )
-        })}
-      </div>
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Period</th>
-            <th scope="col">Alerts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {buckets.map((bucket, i) => (
-            <tr key={i}>
-              <th scope="row">{bucket.label}</th>
-              <td>{bucket.count}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 const DASHBOARD_CARD_LIMIT = 6
 
@@ -132,13 +35,6 @@ export default function DashboardPage() {
     setMounted(true)
   }, [contracts])
 
-  const dailyBuckets = useMemo(
-    () => bucketAlerts(allAlerts, now, DAY_MS, 7),
-    [allAlerts, now]
-  )
-  const hourlyBuckets = useMemo(
-    () => bucketAlerts(allAlerts, now, HOUR_MS, 24),
-    [allAlerts, now]
   const latestAlerts = useMemo(
     () => getLatestAlertTimestamps(allAlerts),
     [allAlerts]
@@ -193,8 +89,6 @@ export default function DashboardPage() {
     .filter((network) => networkCounts[network])
     .map((network) => ({ network, count: networkCounts[network] }))
 
-  if (!mounted) return <DashboardSkeleton />
-
   // Sort by most recent alert (descending), then by label (ascending).
   const sortedContracts = useMemo(() => {
     return [...contracts].sort((a, b) => {
@@ -204,6 +98,8 @@ export default function DashboardPage() {
       return a.label.localeCompare(b.label)
     })
   }, [contracts, latestAlerts])
+
+  if (!mounted) return <DashboardSkeleton />
 
   const visibleContracts = sortedContracts.slice(0, DASHBOARD_CARD_LIMIT)
   const hasMoreContracts = sortedContracts.length > DASHBOARD_CARD_LIMIT

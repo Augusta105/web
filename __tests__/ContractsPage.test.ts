@@ -630,6 +630,8 @@ describe('contracts page — bulk selection (issue #216 paginated scope)', () =>
     const selected = selectAllFiltered(items)
     expect(selected.size).toBe(3)
     expect(selected.has('3')).toBe(true)
+  })
+})
 
 jest.mock('../lib/contractSync', () => ({
   ...jest.requireActual('../lib/contractSync'),

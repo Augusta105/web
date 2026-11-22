@@ -305,7 +305,6 @@ export function saveContract(contract: WatchedContract): boolean {
     throw new DuplicateContractError(contract.contract_id, contract.network)
   }
 
-  const updated = { ...contract, enabled: contract.enabled ?? true, updated_at: Date.now() }
   const index = contracts.findIndex((c) => c.id === contract.id)
   if (index === -1) {
     return save(CONTRACTS_KEY, [...contracts, updated])

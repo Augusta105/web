@@ -80,7 +80,6 @@ export default function ContractsClient() {
   
   const [allContracts, setAllContracts] = useState<WatchedContract[]>([])
   const [syncStatuses, setSyncStatuses] = useState<Record<string, SyncStatus>>({})
-  const [networkFilter, setNetworkFilter] = useState<NetworkFilter>('all')
   const [contractFilter, setContractFilter] = useState<ContractFilter | null>(() => {
     return parseContractFilter(searchParams?.get('filter'))
   })
@@ -176,7 +175,7 @@ export default function ContractsClient() {
 
   useEffect(() => {
     setPage(1)
-  }, [networkFilter, search, contractFilter])
+  }, [networkFilter, statusFilter, selectedRuleTypes, search, contractFilter])
 
   const contractFiltered = useMemo(() => {
     return applyContractFilter(allContracts, contractFilter)
@@ -188,7 +187,6 @@ export default function ContractsClient() {
     }
     return contractFiltered.filter((contract) => contract.network === networkFilter)
   }, [contractFiltered, networkFilter])
-  }, [networkFilter, statusFilter, selectedRuleTypes, search])
 
   useEffect(() => {
     if (!mounted) return
@@ -210,7 +208,7 @@ export default function ContractsClient() {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
 
-    return allContracts.filter((contract) => {
+    return contractFiltered.filter((contract) => {
       if (networkFilter !== 'all' && contract.network !== networkFilter) {
         return false
       }
@@ -235,7 +233,7 @@ export default function ContractsClient() {
 
       return true
     })
-  }, [allContracts, networkFilter, statusFilter, selectedRuleTypes, search])
+  }, [contractFiltered, networkFilter, statusFilter, selectedRuleTypes, search])
 
   const sorted = useMemo(() => sortContracts(filtered, sortBy), [filtered, sortBy])
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
@@ -439,21 +437,6 @@ export default function ContractsClient() {
             >
               {refreshing ? 'Retrying…' : 'Retry'}
             </button>
-          ))}
-
-          {contractFilter && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-medium text-indigo-400 border border-indigo-500/30">
-              Filter: {CONTRACT_FILTER_LABELS[contractFilter] ?? contractFilter}
-              <button
-                type="button"
-                onClick={() => setContractFilter(null)}
-                className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-indigo-500/30 hover:text-indigo-200"
-                aria-label="Remove filter"
-              >
-                ×
-              </button>
-            </span>
-          )}
             <button
               type="button"
               onClick={() => setBannerDismissed(true)}
@@ -486,6 +469,20 @@ export default function ContractsClient() {
                 {filter.label}
               </button>
             ))}
+
+            {contractFilter && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 px-3 py-1.5 text-xs font-medium text-indigo-400 border border-indigo-500/30">
+                Filter: {CONTRACT_FILTER_LABELS[contractFilter] ?? contractFilter}
+                <button
+                  type="button"
+                  onClick={() => setContractFilter(null)}
+                  className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-indigo-500/30 hover:text-indigo-200"
+                  aria-label="Remove filter"
+                >
+                  ×
+                </button>
+              </span>
+            )}
           </div>
 
           {/* Status filter toggle */}

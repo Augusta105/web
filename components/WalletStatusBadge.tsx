@@ -6,8 +6,6 @@ import { readFreighterConnection } from '@/lib/freighter'
 import NetworkBadge from '@/components/NetworkBadge'
 import { Network } from '@/lib/types'
 
-export type WalletStatus = 'checking' | 'connected' | 'disconnected' | 'unavailable'
-
 /**
  * Maps a raw Freighter network id to the app's `Network`. `PUBLIC` is
  * Freighter's name for mainnet, which is not obvious to new users.
@@ -56,9 +54,6 @@ export default function WalletStatusBadge() {
         if (!cancelled) setStatus('disconnected')
       })
 
-    const unsubscribe = subscribeWallet((publicKey, network) => {
-      setStatus(publicKey ? 'connected' : 'disconnected')
-      setNetworkId(network ?? null)
     // The probe above only covers this mount. A connect or disconnect
     // triggered anywhere else in the app arrives on the event bus.
     const unsubscribe = subscribeWallet((publicKey) => {

@@ -421,6 +421,9 @@ describe('NewContract save flow (#194)', () => {
     })
 
     expect(result).toEqual({ ok: false, reason: 'storage_full', synced: true })
+  })
+})
+
 describe('Duplicate contract prefill (#200)', () => {
   const validContractId = 'CDSO4GGZH7KBUQYKOIQDCMCFSRYEPOVDUX7Z4IB5TWNTLT2GDRKDQOYR'
 

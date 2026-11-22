@@ -16,11 +16,10 @@ import {
   buildTestWebhookPayload,
   describeRule,
   TEST_CONTRACT_ID,
-} from '@/lib/api'
-import WebhookTestButton from '@/components/WebhookTestButton'
   sendTestWebhook,
   type TestWebhookResult,
 } from '@/lib/api'
+import WebhookTestButton from '@/components/WebhookTestButton'
 import { generateWebhookSecret } from '@/lib/webhookSignature'
 import { generateId } from '@/lib/id'
 import CopyButton from '@/components/CopyButton'
@@ -65,6 +64,7 @@ export default function NewContractPage() {
   const [showDiscardModal, setShowDiscardModal] = useState(false)
   
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const testAbortRef = useRef<AbortController | null>(null)
   
   // Test payload state
   const [testRuleIndex, setTestRuleIndex] = useState(0)
@@ -261,7 +261,6 @@ export default function NewContractPage() {
     setErrors((prev) => ({ ...prev, wallet: undefined }))
     // The wallet's network is only knowable once it is connected.
     void checkNetworkMismatch()
-    void checkNetworkMismatch(network)
   }
 
   function handleWalletDisconnect() {

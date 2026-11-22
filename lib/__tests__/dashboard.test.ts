@@ -348,6 +348,9 @@ describe('dashboard helpers — active webhooks & pause state (#229, #227)', () 
     expect(isContractPaused({ enabled: false })).toBe(true)
     expect(isContractPaused({ paused: true })).toBe(true)
     expect(isContractPaused({ enabled: true })).toBe(false)
+  })
+})
+
 // ── Dashboard now tick memoization (issue #220) ──────────────────────────────
 
 describe('DashboardPage now memoization and tick updates (issue #220)', () => {
@@ -388,6 +391,9 @@ describe('DashboardPage now memoization and tick updates (issue #220)', () => {
 
     unsub()
     vi.useRealTimers()
+  })
+})
+
 describe('bucketAlerts — calendar alignment and DST resilience', () => {
   it('creates 7 calendar-aligned daily buckets with setDate', () => {
     const anchor = new Date('2026-11-03T15:00:00Z')
@@ -455,4 +461,3 @@ describe('bucketAlerts — calendar alignment and DST resilience', () => {
     }
   })
 })
-

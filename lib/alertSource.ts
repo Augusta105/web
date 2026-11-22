@@ -75,11 +75,6 @@ export function validateAlertPayload(entry: unknown): AlertPayload | string {
   if (a.is_test !== undefined && typeof a.is_test !== 'boolean')
     return 'is_test must be a boolean'
   return entry as AlertPayload
-  const body = await apiFetch<
-    AlertPayload[] | { alerts: AlertPayload[] } | undefined
-  >(`/alerts?${qs.toString()}`, { signal })
-  if (!body) return []
-  return Array.isArray(body) ? body : (body.alerts ?? [])
 }
 
 /**

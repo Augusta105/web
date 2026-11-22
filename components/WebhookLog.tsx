@@ -92,7 +92,6 @@ export function exportCSV(alerts: AlertPayload[], contractLabel?: string, networ
 
 export default function WebhookLog({ alerts, network, contractLabel }: WebhookLogProps) {
   const [selectedFilter, setSelectedFilter] = useState<AlertRuleType | null>(null)
-export default function WebhookLog({ alerts, network }: WebhookLogProps) {
   const searchParams = useSearchParams()
 
   const [selectedFilter, setSelectedFilter] = useState<AlertRuleType | null>(() => {
@@ -373,8 +372,6 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
                     </td>
                     <td className="py-3 text-zinc-400">
                       {alert.amount !== undefined ? formatAmount(alert.amount) : 'N/A'}
-                    <td className="py-3 pr-4 text-zinc-400">
-                      {alert.amount !== undefined ? `${formatAmount(alert.amount)} XLM` : 'N/A'}
                     </td>
                     <td className="py-3 text-right">
                       <button
