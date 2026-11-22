@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { WatchWalletChanges } from '@stellar/freighter-api'
 import { readFreighterConnection } from '@/lib/freighter'
 import { broadcastWalletChange, subscribeWallet } from '@/lib/walletEvents'
+import { isUserDisconnected } from '@/lib/disconnectFlag'
 
 /**
  * Single app-level watcher shared by every wallet-aware component.
@@ -19,7 +20,10 @@ function acquireWalletWatcher(): () => void {
   if (!watcher) {
     const instance = new WatchWalletChanges(5000)
     instance.watch((result) => {
-      broadcastWalletChange(result?.address ?? null)
+      const address = result?.address ?? null
+      // Do not undo an in-app disconnect while the site is still approved.
+      if (address && isUserDisconnected()) return
+      broadcastWalletChange(address)
     })
     watcher = instance
   }

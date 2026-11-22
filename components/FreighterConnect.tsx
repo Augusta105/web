@@ -6,6 +6,11 @@ import NetworkBadge from '@/components/NetworkBadge'
 import { subscribeWallet } from '@/lib/walletEvents'
 import type { Network } from '@/types'
 import {
+  FREIGHTER_REVOKE_HINT,
+  isUserDisconnected,
+  setUserDisconnected,
+} from '@/lib/disconnectFlag'
+import {
   connectFreighter,
   FreighterUnavailableError,
   openFreighterInstallPage,
@@ -48,6 +53,11 @@ export default function FreighterConnect({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [missingExtension, setMissingExtension] = useState(false)
+  const [userDisconnected, setUserDisconnectedState] = useState(false)
+
+  useEffect(() => {
+    setUserDisconnectedState(isUserDisconnected())
+  }, [])
 
   // Held in a ref rather than listed as a dependency: callers commonly pass an
   // inline arrow, which changes identity on every parent render. Depending on it
@@ -123,6 +133,7 @@ export default function FreighterConnect({
     try {
       setMissingExtension(false)
       const session = await connectFreighter()
+      setUserDisconnectedState(false)
       publish(session.publicKey)
       setNetwork(session.network ?? null)
       onConnect?.(session.publicKey)
@@ -141,6 +152,8 @@ export default function FreighterConnect({
   // of the session. Nothing is persisted: the wallet is the source of truth, so
   // a key cached in localStorage would outlive an account switch in Freighter.
   function disconnect() {
+    setUserDisconnected()
+    setUserDisconnectedState(true)
     publish(null)
     setNetwork(null)
     onDisconnect?.()
@@ -239,6 +252,11 @@ export default function FreighterConnect({
         )}
         Connect Freighter
       </button>
+      {userDisconnected && !missingExtension ? (
+        <p className="mt-2 text-xs text-zinc-500" data-testid="freighter-revoke-hint">
+          {FREIGHTER_REVOKE_HINT}
+        </p>
+      ) : null}
       {missingExtension ? (
         <div className="mt-2 flex flex-col gap-1.5 text-xs text-zinc-400" role="alert">
           <p>

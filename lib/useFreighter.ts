@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { broadcastWalletChange, subscribeWallet } from '@/lib/walletEvents'
+import { setUserDisconnected } from '@/lib/disconnectFlag'
 import {
   connectFreighter,
   FreighterUnavailableError,
@@ -77,6 +78,7 @@ export function useFreighter() {
   }, [])
 
   const disconnect = useCallback(() => {
+    setUserDisconnected()
     broadcastWalletChange(null)
     setState({ publicKey: null, network: null, loading: false, error: null })
   }, [])

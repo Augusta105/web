@@ -23,6 +23,7 @@ import {
 } from '@stellar/freighter-api'
 
 import type { Network } from '@/types'
+import { clearUserDisconnected, isUserDisconnected } from '@/lib/disconnectFlag'
 
 const FREIGHTER_INSTALL_URL = 'https://www.freighter.app/'
 
@@ -218,6 +219,13 @@ export async function readFreighterConnection(): Promise<{
   network: string | null
   networkPassphrase: string | null
 } | null> {
+  // The user disconnected in-app: the site is still approved in Freighter, so
+  // probing would silently reconnect them. Report "disconnected" until they
+  // press Connect again.
+  if (isUserDisconnected()) {
+    return { publicKey: null, network: null, networkPassphrase: null }
+  }
+
   let connected = false
   try {
     const result = await withTimeout(isConnected())
@@ -278,6 +286,8 @@ export async function connectFreighter(): Promise<FreighterSession> {
       throw new FreighterRejectedError()
     }
     address = result.address
+    // An explicit Connect ends the user's earlier in-app disconnect.
+    clearUserDisconnected()
   } catch (error) {
     if (
       error instanceof FreighterRejectedError ||
