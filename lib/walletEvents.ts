@@ -34,6 +34,7 @@ interface WalletChangeDetail {
  * degrades to same-tab CustomEvents only.
  */
 let walletChannel: BroadcastChannel | null = null
+let lastKnownPublicKey: string | null | undefined
 
 function getWalletChannel(): BroadcastChannel | null {
   if (typeof BroadcastChannel === 'undefined') return null
@@ -70,6 +71,8 @@ function clearPersistedPublicKey(): void {
 export function broadcastWalletChange(publicKey: string | null): void {
   if (typeof window === 'undefined') return
 
+  lastKnownPublicKey = publicKey
+
   // Never persist the key; just make sure no stale copy survives.
   clearPersistedPublicKey()
   try {
@@ -92,6 +95,19 @@ export function broadcastWalletChange(publicKey: string | null): void {
   }
 }
 
+/**
+ * Broadcast only when the observed wallet key has changed. Initial probes
+ * across multiple consumers can all resolve with the same key.
+ */
+export function broadcastWalletChangeIfChanged(publicKey: string | null): void {
+  if (lastKnownPublicKey === undefined) {
+    lastKnownPublicKey = publicKey
+    return
+  }
+  if (lastKnownPublicKey === publicKey) return
+  broadcastWalletChange(publicKey)
+}
+
 // Remove any value persisted by older builds as soon as this module loads.
 if (typeof window !== 'undefined') {
   clearPersistedPublicKey()
@@ -112,6 +128,7 @@ export function subscribeWallet(
 
   const handler = (event: Event) => {
     const detail = (event as CustomEvent<WalletChangeDetail>).detail
+    lastKnownPublicKey = detail ? detail.publicKey : null
     listener(detail ? detail.publicKey : null)
   }
 
@@ -120,7 +137,8 @@ export function subscribeWallet(
   const channel = getWalletChannel()
   const channelHandler = (event: MessageEvent<WalletChangeDetail>) => {
     const detail = event.data
-    listener(detail ? detail.publicKey ?? null : null)
+    lastKnownPublicKey = detail ? (detail.publicKey ?? null) : null
+    listener(detail ? (detail.publicKey ?? null) : null)
   }
 
   if (channel) {

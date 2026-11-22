@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { WatchWalletChanges } from '@stellar/freighter-api'
 import { readFreighterConnection } from '@/lib/freighter'
-import { broadcastWalletChange, subscribeWallet } from '@/lib/walletEvents'
+import {
+  broadcastWalletChange,
+  broadcastWalletChangeIfChanged,
+  subscribeWallet,
+} from '@/lib/walletEvents'
 
 /**
  * Single app-level watcher shared by every wallet-aware component.
@@ -49,6 +53,8 @@ export function useWalletWatcher(): void {
 export interface WalletState {
   /** Connected public key, or null while disconnected. */
   publicKey: string | null
+  /** Freighter network id, e.g. `"TESTNET"`. */
+  network: string | null
   /** True once the initial Freighter connection probe has settled. */
   initialized: boolean
   /** Set the wallet state everywhere, including this instance. */
@@ -64,6 +70,7 @@ export interface WalletState {
  */
 export function useWalletState(): WalletState {
   const [publicKey, setPublicKey] = useState<string | null>(null)
+  const [network, setNetwork] = useState<string | null>(null)
   const [initialized, setInitialized] = useState(false)
 
   const publish = useCallback((next: string | null) => {
@@ -80,8 +87,11 @@ export function useWalletState(): WalletState {
     async function probe() {
       try {
         const connection = await readFreighterConnection()
-        if (!connection?.publicKey || cancelled) return
-        publish(connection.publicKey)
+        if (cancelled) return
+        const nextPublicKey = connection?.publicKey ?? null
+        setPublicKey(nextPublicKey)
+        setNetwork(connection?.network ?? null)
+        broadcastWalletChangeIfChanged(nextPublicKey)
       } catch {
         // Extension refused to answer; stay in the disconnected state.
       } finally {
@@ -100,5 +110,5 @@ export function useWalletState(): WalletState {
   // cleanup this effect needs.
   useEffect(() => subscribeWallet(setPublicKey), [])
 
-  return { publicKey, initialized, publish }
+  return { publicKey, network, initialized, publish }
 }

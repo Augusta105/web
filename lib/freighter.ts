@@ -51,15 +51,17 @@ const FREIGHTER_NETWORK_BY_CHAIN: Record<Network, string> = {
 }
 
 /** Reverse of {@link FREIGHTER_NETWORK_BY_CHAIN}: Freighter network id → app network. */
-export const FREIGHTER_CHAIN_BY_NETWORK: Record<string, Network> = Object.fromEntries(
-  (Object.entries(FREIGHTER_NETWORK_BY_CHAIN) as [Network, string][]).map(([chain, network]) => [
-    network,
-    chain,
-  ])
-)
+export const FREIGHTER_CHAIN_BY_NETWORK: Record<string, Network> =
+  Object.fromEntries(
+    (Object.entries(FREIGHTER_NETWORK_BY_CHAIN) as [Network, string][]).map(
+      ([chain, network]) => [network, chain]
+    )
+  )
 
 /** Maps a Freighter network id to the app network, or null when unsupported. */
-export function mapFreighterNetwork(freighterNetwork: string | null): Network | null {
+export function mapFreighterNetwork(
+  freighterNetwork: string | null
+): Network | null {
   if (!freighterNetwork) return null
   return FREIGHTER_CHAIN_BY_NETWORK[freighterNetwork] ?? null
 }
@@ -197,6 +199,14 @@ export function isNetworkMatch(
   )
 }
 
+type FreighterConnection = {
+  publicKey: string | null
+  network: string | null
+  networkPassphrase: string | null
+} | null
+
+let pendingConnectionProbe: Promise<FreighterConnection> | null = null
+
 async function readNetworkDetails(): Promise<{
   network: string
   networkPassphrase: string
@@ -213,11 +223,7 @@ async function readNetworkDetails(): Promise<{
  * Current wallet state, or null when the extension is not reachable.
  * `publicKey` is null when the extension is installed but locked/not approved.
  */
-export async function readFreighterConnection(): Promise<{
-  publicKey: string | null
-  network: string | null
-  networkPassphrase: string | null
-} | null> {
+async function probeFreighterConnection(): Promise<FreighterConnection> {
   let connected = false
   try {
     const result = await withTimeout(isConnected())
@@ -252,6 +258,28 @@ export async function readFreighterConnection(): Promise<{
   } catch {
     return { publicKey: address, network: null, networkPassphrase: null }
   }
+}
+
+/**
+ * Share an in-flight extension probe between wallet consumers mounting
+ * together. The next probe is allowed after this one settles so later
+ * navigations still observe changes made in Freighter.
+ */
+export function readFreighterConnection(): Promise<FreighterConnection> {
+  if (pendingConnectionProbe) return pendingConnectionProbe
+
+  const probe = probeFreighterConnection()
+  pendingConnectionProbe = probe
+  void probe.then(
+    () => {
+      if (pendingConnectionProbe === probe) pendingConnectionProbe = null
+    },
+    () => {
+      if (pendingConnectionProbe === probe) pendingConnectionProbe = null
+    }
+  )
+
+  return probe
 }
 
 /** Explicit connect flow — prompts the user to approve this site. */
