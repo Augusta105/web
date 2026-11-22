@@ -6,6 +6,7 @@ import {
   type WebhookUrlErrorCode,
 } from '@/lib/stellar'
 import { sanitizeAdminFunctionNames } from '@/lib/soroban'
+import { validateThresholdNumber } from '@/lib/formatAmount'
 
 /** Export file format, aligned with WatchedContract (uses contract_id, not address). */
 export interface ContractsSnapshot {
@@ -162,8 +163,12 @@ function validateRule(rule: unknown): AlertRule | string {
   if (!isAlertRuleType(type)) return `unknown rule type "${String(type)}"`
   const parsed = parseAlertRule(rule)
   if (!parsed) {
-    if (type === 'LargeTransfer')
-      return 'threshold_xlm must be a non-negative number'
+    if (type === 'LargeTransfer') {
+      const threshold = (rule as { threshold_xlm?: unknown }).threshold_xlm
+      if (typeof threshold !== 'number')
+        return 'threshold_xlm must be a number'
+      return `invalid threshold_xlm: ${validateThresholdNumber(threshold) ?? 'must be a valid number'}`
+    }
     if (type === 'AdminFunctionCalled')
       return 'function_names must be an array of strings'
     return 'function_name must be a non-empty string'

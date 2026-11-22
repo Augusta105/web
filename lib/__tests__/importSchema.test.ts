@@ -169,3 +169,29 @@ describe('parseImport', () => {
     })
   })
 })
+
+describe('LargeTransfer threshold validation', () => {
+  const withThreshold = (t: unknown) => ({
+    ...good,
+    rules: [{ type: 'LargeTransfer', threshold_xlm: t }],
+  })
+
+  it.each([0, -1, 1e12, 0.123456789])('rejects %s', (t) => {
+    const result = validateContractEntry(withThreshold(t))
+    expect(typeof result).toBe('string')
+    expect(result).toMatch(/^invalid threshold_xlm: /)
+  })
+
+  it('reports specific reasons', () => {
+    expect(validateContractEntry(withThreshold(0))).toContain('greater than 0')
+    expect(validateContractEntry(withThreshold(1e12))).toContain('cannot exceed')
+    expect(validateContractEntry(withThreshold(0.123456789))).toContain('decimal places')
+    expect(validateContractEntry(withThreshold('5'))).toBe('threshold_xlm must be a number')
+  })
+
+  it('accepts valid thresholds', () => {
+    const result = validateContractEntry(withThreshold(0.0000001))
+    expect(typeof result).toBe('object')
+    expect(validateContractEntry(withThreshold(50_000_000_000))).toHaveProperty('rules')
+  })
+})

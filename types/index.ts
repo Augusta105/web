@@ -1,4 +1,5 @@
 import { isValidFunctionName } from '@/lib/soroban'
+import { validateThresholdNumber } from '@/lib/formatAmount'
 
 export type Network = 'mainnet' | 'testnet' | 'futurenet'
 
@@ -55,8 +56,7 @@ export function parseAlertRule(value: unknown): AlertRule | null {
     case 'LargeTransfer':
       if (
         typeof r.threshold_xlm !== 'number' ||
-        !isFinite(r.threshold_xlm) ||
-        r.threshold_xlm < 0
+        validateThresholdNumber(r.threshold_xlm) !== null
       )
         return null
       return { ...base, type: r.type, threshold_xlm: r.threshold_xlm }
