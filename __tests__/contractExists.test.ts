@@ -2,6 +2,7 @@ import { vi } from 'vitest'
 import { Address, StrKey, xdr } from '@stellar/stellar-sdk'
 import {
   contractExists,
+  deploymentBlocksSave,
   contractInstanceLedgerKey,
   getLedgerEntriesRequest,
 } from '@/lib/contractExists'
@@ -174,5 +175,15 @@ describe('contractExists', () => {
     controller.abort()
 
     await expect(pending).resolves.toEqual({ status: 'unavailable', reason: 'Request cancelled' })
+  })
+})
+
+describe('deploymentBlocksSave', () => {
+  it('blocks only an un-overridden not_found, e.g. when switching a contract to another network', () => {
+    expect(deploymentBlocksSave('not_found', false)).toBe(true)
+    expect(deploymentBlocksSave('not_found', true)).toBe(false)
+    for (const status of ['found', 'archived', 'invalid', 'unavailable', 'idle']) {
+      expect(deploymentBlocksSave(status, false)).toBe(false)
+    }
   })
 })

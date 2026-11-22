@@ -145,3 +145,13 @@ export async function contractExists(
     signal?.removeEventListener('abort', onCallerAbort)
   }
 }
+
+/**
+ * True when a deployment check result should stop a save: only an
+ * authoritative `not_found` that the user has not overridden. `unavailable`,
+ * `archived` and `invalid` never block here (format errors are validated
+ * separately).
+ */
+export function deploymentBlocksSave(status: string, overridden: boolean): boolean {
+  return status === 'not_found' && !overridden
+}
