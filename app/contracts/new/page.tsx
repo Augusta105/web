@@ -23,6 +23,7 @@ import WebhookTestButton from '@/components/WebhookTestButton'
 } from '@/lib/api'
 import { generateWebhookSecret } from '@/lib/webhookSignature'
 import { generateId } from '@/lib/id'
+import { MAX_LABEL_LENGTH } from '@/lib/importSchema'
 import CopyButton from '@/components/CopyButton'
 import ContractVerification, { type CheckState } from '@/components/ContractVerification'
 import { useFreighterConnection } from '@/lib/useFreighterConnection'
@@ -276,8 +277,8 @@ export default function NewContractPage() {
 
     if (!trimmedLabel) {
       e.label = 'Label is required'
-    } else if (trimmedLabel.length > 100) {
-      e.label = 'Label must be 100 characters or less'
+    } else if (trimmedLabel.length > MAX_LABEL_LENGTH) {
+      e.label = `Label must be ${MAX_LABEL_LENGTH} characters or less`
     }
 
     if (!trimmedContractId) {
@@ -533,7 +534,7 @@ export default function NewContractPage() {
                   setLabelWarning(null)
                 }
               }}
-              maxLength={100}
+              maxLength={MAX_LABEL_LENGTH}
               aria-invalid={Boolean(errors.label)}
               aria-describedby={errors.label ? labelErrorId : undefined}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition-colors"
@@ -543,7 +544,7 @@ export default function NewContractPage() {
                 {errors.label && <p id={labelErrorId} className="text-xs text-red-400">{errors.label}</p>}
                 {labelWarning && !errors.label && <p className="text-xs text-amber-400">{labelWarning}</p>}
               </div>
-              <p className="text-xs text-zinc-500">{label.length}/100</p>
+              <p className="text-xs text-zinc-500">{label.length}/{MAX_LABEL_LENGTH}</p>
             </div>
           </div>
 

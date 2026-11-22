@@ -16,6 +16,7 @@ import {
   validateWebhookUrl,
 } from '@/lib/stellar'
 import { generateWebhookSecret } from '@/lib/webhookSignature'
+import { MAX_LABEL_LENGTH } from '@/lib/importSchema'
 import {
   getWalletNetwork,
   networkMismatchWarning,
@@ -232,8 +233,8 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
       setMetadataError('Label is required')
       return
     }
-    if (trimmedLabel.length > 100) {
-      setMetadataError('Label must be 100 characters or less')
+    if (trimmedLabel.length > MAX_LABEL_LENGTH) {
+      setMetadataError(`Label must be ${MAX_LABEL_LENGTH} characters or less`)
       return
     }
     if (!trimmedWebhookUrl) {

@@ -65,6 +65,9 @@ export interface ImportParseResult {
   settings?: BackupSettings
 }
 
+/** Maximum contract label length, shared by the forms and import/API validation. */
+export const MAX_LABEL_LENGTH = 100
+
 const NETWORKS: Network[] = ['mainnet', 'testnet', 'futurenet']
 
 /**
@@ -222,12 +225,14 @@ export function validateContractEntry(
     if (typeof result === 'string') return result
     rules.push(result)
   }
+  const trimmedLabel = typeof e.label === 'string' ? e.label.trim() : ''
+  if (trimmedLabel.length > MAX_LABEL_LENGTH)
+    return `label must be ${MAX_LABEL_LENGTH} characters or less`
   const now = Date.now()
   const contract: WatchedContract = {
     id:
       typeof e.id === 'string' && e.id ? e.id : generateId(),
-    label:
-      typeof e.label === 'string' && e.label.trim() ? e.label : e.contract_id,
+    label: trimmedLabel || e.contract_id,
     contract_id: e.contract_id,
     network: e.network as Network,
     rules,

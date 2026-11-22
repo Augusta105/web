@@ -223,3 +223,21 @@ describe('duplicates within one import file', () => {
     expect(new Set(result.contracts.map((c) => c.id)).size).toBe(2)
   })
 })
+
+describe('label rules', () => {
+  it('trims labels', () => {
+    const result = validateContractEntry({ ...good, label: '  Alpha  ' })
+    expect(result).toHaveProperty('label', 'Alpha')
+  })
+
+  it('rejects labels over the max length and accepts exactly the max', () => {
+    expect(validateContractEntry({ ...good, label: 'a'.repeat(101) })).toBe(
+      'label must be 100 characters or less'
+    )
+    expect(validateContractEntry({ ...good, label: 'a'.repeat(100) })).toHaveProperty('label')
+  })
+
+  it('falls back to contract_id for a blank label', () => {
+    expect(validateContractEntry({ ...good, label: '   ' })).toHaveProperty('label', CID)
+  })
+})
