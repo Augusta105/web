@@ -60,6 +60,7 @@ export default function NewContractPage() {
   const [saving, setSaving] = useState(false)
   const [verificationStatus, setVerificationStatus] = useState<CheckState>('idle')
   const [verificationReason, setVerificationReason] = useState<string | null>(null)
+  const [verificationLiveUntil, setVerificationLiveUntil] = useState<number | null>(null)
   const [verificationOverridden, setVerificationOverridden] = useState(false)
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null)
   const [showDiscardModal, setShowDiscardModal] = useState(false)
@@ -585,9 +586,11 @@ export default function NewContractPage() {
               className="mt-1"
               status={verificationStatus}
               reason={verificationReason}
-              onStatusChange={(status, reason) => {
+              liveUntilLedgerSeq={verificationLiveUntil}
+              onStatusChange={(status, reason, liveUntil) => {
                 setVerificationStatus(status)
                 setVerificationReason(reason ?? null)
+                setVerificationLiveUntil(liveUntil ?? null)
               }}
               overridden={verificationOverridden}
               onOverrideChange={setVerificationOverridden}

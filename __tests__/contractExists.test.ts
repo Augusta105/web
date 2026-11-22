@@ -69,6 +69,38 @@ describe('contractExists', () => {
     await expect(contractExists('mainnet', CONTRACT_ID)).resolves.toEqual({ status: 'not_found' })
   })
 
+  it('reports found with liveUntilLedgerSeq when the entry is live', async () => {
+    mockRpc({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        entries: [{ key: 'AAAA', xdr: 'BBBB', lastModifiedLedgerSeq: 900, liveUntilLedgerSeq: 2000 }],
+        latestLedger: 1000,
+      },
+    })
+
+    await expect(contractExists('testnet', CONTRACT_ID)).resolves.toEqual({
+      status: 'found',
+      liveUntilLedgerSeq: 2000,
+    })
+  })
+
+  it('reports archived when the entry TTL is behind the latest ledger', async () => {
+    mockRpc({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        entries: [{ key: 'AAAA', xdr: 'BBBB', lastModifiedLedgerSeq: 100, liveUntilLedgerSeq: 500 }],
+        latestLedger: 1000,
+      },
+    })
+
+    await expect(contractExists('testnet', CONTRACT_ID)).resolves.toEqual({
+      status: 'archived',
+      liveUntilLedgerSeq: 500,
+    })
+  })
+
   it('rejects malformed contract IDs without calling the RPC', async () => {
     await expect(contractExists('testnet', 'not-a-contract')).resolves.toEqual({
       status: 'not_found',

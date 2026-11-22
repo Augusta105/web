@@ -21,10 +21,12 @@ export function contractInstanceLedgerKey(contractId: string): string {
 /** Default Soroban RPC timeout, in milliseconds. */
 const CONTRACT_LOOKUP_TIMEOUT_MS = 8000
 
-export type ContractLookupStatus = 'found' | 'not_found' | 'unavailable'
+export type ContractLookupStatus = 'found' | 'archived' | 'not_found' | 'unavailable'
 
 export interface ContractLookupResult {
   status: ContractLookupStatus
+  /** Ledger sequence until which the instance entry is live (TTL expiry). */
+  liveUntilLedgerSeq?: number
   /** Why the RPC could not be reached or answered with an error. */
   reason?: string
 }
@@ -51,6 +53,12 @@ export function getLedgerEntriesRequest(contractId: string, id = 1): string {
  * Checks whether a contract is deployed on the given network by asking that
  * network's Soroban RPC (from `SOROBAN_RPC_URLS` via `sorobanRpcUrl`) for its
  * contract instance ledger entry.
+ *
+ * An entry whose `liveUntilLedgerSeq` is behind `latestLedger` has expired
+ * (TTL lapsed) and is reported as `archived`: the contract exists but must be
+ * restored before it can be invoked. An entry that was already evicted from the
+ * live ledger is indistinguishable from a missing one via `getLedgerEntries`
+ * alone, so it still reads as `not_found`.
  *
  * Returns `not_found` only when the RPC answered authoritatively with no
  * entry. RPC errors, timeouts and unparsable answers return `unavailable`, so
@@ -85,7 +93,10 @@ export async function contractExists(
     }
 
     const body = (await res.json()) as {
-      result?: { entries?: unknown[] }
+      result?: {
+        entries?: { liveUntilLedgerSeq?: number }[]
+        latestLedger?: number
+      }
       error?: { message?: string } | string
     }
 
@@ -102,7 +113,20 @@ export async function contractExists(
       return { status: 'unavailable', reason: 'Unexpected RPC response' }
     }
 
-    return { status: entries.length > 0 ? 'found' : 'not_found' }
+    if (entries.length === 0) return { status: 'not_found' }
+
+    const liveUntilLedgerSeq = entries[0]?.liveUntilLedgerSeq
+    const latestLedger = body.result?.latestLedger
+    if (
+      typeof liveUntilLedgerSeq === 'number' &&
+      typeof latestLedger === 'number' &&
+      liveUntilLedgerSeq < latestLedger
+    ) {
+      return { status: 'archived', liveUntilLedgerSeq }
+    }
+    return typeof liveUntilLedgerSeq === 'number'
+      ? { status: 'found', liveUntilLedgerSeq }
+      : { status: 'found' }
   } catch (error) {
     const name = (error as { name?: string })?.name
     if (name === 'AbortError') {
