@@ -195,3 +195,31 @@ describe('LargeTransfer threshold validation', () => {
     expect(validateContractEntry(withThreshold(50_000_000_000))).toHaveProperty('rules')
   })
 })
+
+describe('duplicates within one import file', () => {
+  it('reports later duplicates as errors and keeps the first', () => {
+    const { id: _id, ...noId } = good
+    const result = parseImport(JSON.stringify([noId, { ...noId, label: 'Again' }]))
+    expect(result.contracts).toHaveLength(1)
+    expect(result.contracts[0].label).toBe('Alpha')
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].index).toBe(1)
+    expect(result.errors[0].message).toMatch(/duplicate/)
+  })
+
+  it('generates a non-colon-joined id when none is provided', () => {
+    const { id: _id, ...noId } = good
+    const { contracts } = parseImport(JSON.stringify([noId]))
+    expect(contracts[0].id).not.toBe(`${CID}:testnet`)
+    expect(contracts[0].id.length).toBeGreaterThan(0)
+  })
+
+  it('allows the same contract_id on different networks', () => {
+    const { id: _id, ...noId } = good
+    const result = parseImport(
+      JSON.stringify([noId, { ...noId, network: 'futurenet' }])
+    )
+    expect(result.contracts).toHaveLength(2)
+    expect(new Set(result.contracts.map((c) => c.id)).size).toBe(2)
+  })
+})

@@ -6,6 +6,7 @@ import {
   type WebhookUrlErrorCode,
 } from '@/lib/stellar'
 import { sanitizeAdminFunctionNames } from '@/lib/soroban'
+import { generateId } from '@/lib/id'
 import { validateThresholdNumber } from '@/lib/formatAmount'
 
 /** Export file format, aligned with WatchedContract (uses contract_id, not address). */
@@ -224,7 +225,7 @@ export function validateContractEntry(
   const now = Date.now()
   const contract: WatchedContract = {
     id:
-      typeof e.id === 'string' && e.id ? e.id : `${e.contract_id}:${e.network}`,
+      typeof e.id === 'string' && e.id ? e.id : generateId(),
     label:
       typeof e.label === 'string' && e.label.trim() ? e.label : e.contract_id,
     contract_id: e.contract_id,
@@ -266,10 +267,24 @@ export function parseImport(json: string): ImportParseResult {
   }
   const contracts: WatchedContract[] = []
   const errors: ImportEntryError[] = []
+  const seen = new Map<string, number>()
   list.forEach((entry, index) => {
     const result = validateContractEntry(entry)
-    if (typeof result === 'string') errors.push({ index, message: result })
-    else contracts.push(result)
+    if (typeof result === 'string') {
+      errors.push({ index, message: result })
+      return
+    }
+    const key = `${result.network}:${result.contract_id}`
+    const first = seen.get(key)
+    if (first !== undefined) {
+      errors.push({
+        index,
+        message: `duplicate of entry ${first} (same contract_id and network)`,
+      })
+      return
+    }
+    seen.set(key, index)
+    contracts.push(result)
   })
   if (version !== 2) return { contracts, errors }
 
