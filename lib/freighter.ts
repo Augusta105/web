@@ -105,9 +105,12 @@ export class FreighterTimeoutError extends Error {
 
 export interface FreighterSession {
   publicKey: string
-  /** Freighter network id, e.g. `"TESTNET"`. */
-  network: string
-  networkPassphrase: string
+  /**
+   * Freighter network id, e.g. `"TESTNET"`. `null` when the approved wallet did
+   * not report its network in time; callers should re-read it asynchronously.
+   */
+  network: string | null
+  networkPassphrase: string | null
 }
 
 function withTimeout<T>(
@@ -301,8 +304,15 @@ export async function connectFreighter(): Promise<FreighterSession> {
     )
   }
 
-  const details = await readNetworkDetails()
-  return { publicKey: address, ...details }
+  // The user has already approved at this point, so a failing or slow
+  // getNetworkDetails must not be reported as "Freighter not installed".
+  // Return the session without a network; the caller re-reads it later.
+  try {
+    const details = await readNetworkDetails()
+    return { publicKey: address, ...details }
+  } catch {
+    return { publicKey: address, network: null, networkPassphrase: null }
+  }
 }
 
 /**

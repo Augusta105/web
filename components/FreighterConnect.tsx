@@ -136,6 +136,17 @@ export default function FreighterConnect({
       setUserDisconnectedState(false)
       publish(session.publicKey)
       setNetwork(session.network ?? null)
+      if (!session.network) {
+        // Network details were slow or failed after approval: re-read them in
+        // the background instead of blocking or failing the connection.
+        void readFreighterConnection()
+          .then((connection) => {
+            if (connection?.network) setNetwork(connection.network)
+          })
+          .catch(() => {
+            // Leave the network unknown; the watcher will refresh it.
+          })
+      }
       onConnect?.(session.publicKey)
     } catch (err) {
       if (err instanceof FreighterUnavailableError) {

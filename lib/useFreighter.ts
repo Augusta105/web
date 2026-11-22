@@ -65,6 +65,19 @@ export function useFreighter() {
         loading: false,
         error: null,
       })
+      if (!session.network) {
+        // Network details were slow or failed after approval: re-read them in
+        // the background instead of failing the connection.
+        void readFreighterConnection()
+          .then((connection) => {
+            if (connection?.network) {
+              setState((prev) => ({ ...prev, network: connection.network }))
+            }
+          })
+          .catch(() => {
+            // Leave the network unknown.
+          })
+      }
     } catch (err) {
       if (err instanceof FreighterUnavailableError) {
         openFreighterInstallPage()
