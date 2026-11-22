@@ -183,7 +183,10 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
 
   // Mirror filters into URL search params
   useEffect(() => {
-    const params = new URLSearchParams()
+    if (typeof window === 'undefined') return
+    // Start from the live URL so unrelated params, the hash and history.state survive.
+    const params = new URLSearchParams(window.location.search)
+    for (const key of ['rule', 'q', 'range', 'from', 'to', 'sort', 'page']) params.delete(key)
     if (selectedFilter) params.set('rule', selectedFilter)
     if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim())
     if (range !== 'all') params.set('range', range)
@@ -193,10 +196,9 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
     if (currentPage > 0) params.set('page', String(currentPage + 1))
 
     const qs = params.toString()
-    if (typeof window !== 'undefined') {
-      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
-      window.history.replaceState(null, '', newUrl)
-    }
+    const { pathname, hash } = window.location
+    const newUrl = `${qs ? `${pathname}?${qs}` : pathname}${hash}`
+    window.history.replaceState(window.history.state, '', newUrl)
   }, [selectedFilter, debouncedSearch, range, customFrom, customTo, sortDirection, currentPage])
 
   if (alerts.length === 0) {
