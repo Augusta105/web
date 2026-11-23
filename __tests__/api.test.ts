@@ -190,7 +190,37 @@ describe('sendTestWebhook', () => {
         is_test: true,
       })
       // The receiver's status comes from the proxy's JSON, not its HTTP code.
-      expect(result).toEqual({ status: 204, ok: true })
+      expect(result).toMatchObject({ status: 204, ok: true })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('sends a Slack body with its alert and only allow-listed headers via the proxy', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    try {
+      ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 200, ok: true }),
+      })
+
+      await sendTestWebhook('https://hooks.slack.com/services/T/B/X', {
+        contractId: 'CBCDEF',
+        format: 'slack',
+        headers: { Authorization: 'Bearer test-token', Host: 'evil.example' },
+      })
+
+      const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>)
+        .mock.calls[0]
+      const sent = JSON.parse((init as RequestInit).body as string)
+      expect(sent.format).toBe('slack')
+      expect(sent.payload).toMatchObject({
+        contract_id: 'CBCDEF',
+        is_test: true,
+      })
+      expect(Object.keys(JSON.parse(sent.body))).toEqual(['text'])
+      expect(sent.headers).toEqual({ Authorization: 'Bearer test-token' })
     } finally {
       vi.unstubAllEnvs()
     }

@@ -30,6 +30,7 @@ import type { NextRequest } from 'next/server'
 import { POST } from '@/app/api/test-webhook/route'
 import { deliverWebhook } from '@/lib/webhookProxy'
 import { buildTestWebhookPayload } from '@/lib/api'
+import { formatWebhookBody } from '@/lib/webhookFormat'
 import { SIGNATURE_HEADER, signWebhookPayload } from '@/lib/webhookSignature'
 
 const CID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4'
@@ -51,7 +52,11 @@ const testBody = (
   overrides: Partial<Parameters<typeof buildTestWebhookPayload>[0]> = {}
 ) =>
   JSON.stringify(
-    buildTestWebhookPayload({ contractId: CID, network: 'testnet', ...overrides })
+    buildTestWebhookPayload({
+      contractId: CID,
+      network: 'testnet',
+      ...overrides,
+    })
   )
 
 const valid = {
@@ -106,7 +111,10 @@ describe('POST /api/test-webhook', () => {
 
   it.each([
     ['arbitrary JSON', '{"spam":true}'],
-    ['a non-test payload', testBody().replace('"is_test":true', '"is_test":false')],
+    [
+      'a non-test payload',
+      testBody().replace('"is_test":true', '"is_test":false'),
+    ],
     [
       'a payload with extra fields',
       JSON.stringify({ ...JSON.parse(testBody()), extra: 'x' }),
@@ -175,7 +183,7 @@ describe('POST /api/test-webhook', () => {
   })
 
   it('caps the body size', async () => {
-    const res = await POST(request({ ...valid, padding: 'x'.repeat(5000) }))
+    const res = await POST(request({ ...valid, padding: 'x'.repeat(9000) }))
     expect(res.status).toBe(413)
   })
 
@@ -200,5 +208,70 @@ describe('POST /api/test-webhook', () => {
     const res = await POST(request({ ...valid, url }))
     expect(res.status).toBe(403)
     expect(deliverWebhook).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/test-webhook formats and headers (#408, #409)', () => {
+  const alertPayload = buildTestWebhookPayload({
+    contractId: CID,
+    network: 'testnet',
+  })
+
+  it('accepts a Slack body that renders from the alert it carries', async () => {
+    const body = formatWebhookBody(alertPayload, 'slack')
+    const res = await POST(
+      request({
+        url: 'https://hooks.slack.com/services/T/B/X',
+        body,
+        format: 'slack',
+        payload: alertPayload,
+      })
+    )
+    expect(res.status).toBe(200)
+    const [, sent] = vi.mocked(deliverWebhook).mock.calls.at(-1)!
+    expect(sent).toBe(body)
+  })
+
+  it('rejects a formatted body that does not match the alert', async () => {
+    const res = await POST(
+      request({
+        url: 'https://hooks.slack.com/services/T/B/X',
+        body: JSON.stringify({ text: 'anything the caller likes' }),
+        format: 'slack',
+        payload: alertPayload,
+      })
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects an unknown format', async () => {
+    const res = await POST(
+      request({
+        url: valid.url,
+        body: valid.body,
+        format: 'teams',
+        payload: alertPayload,
+      })
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('forwards only allow-listed headers', async () => {
+    const res = await POST(
+      request({
+        ...valid,
+        headers: {
+          Authorization: 'Bearer test-token',
+          Host: 'evil.example',
+          'X-Custom': 'not-allowed',
+        },
+      })
+    )
+    expect(res.status).toBe(200)
+    const [, , headers] = vi.mocked(deliverWebhook).mock.calls.at(-1)!
+    expect(headers.Authorization).toBe('Bearer test-token')
+    expect(headers).not.toHaveProperty('Host')
+    expect(headers).not.toHaveProperty('X-Custom')
+    expect(headers['Content-Type']).toBe('application/json')
   })
 })
