@@ -16,6 +16,8 @@ interface WebhookTestButtonProps {
   rule?: AlertRule
   /** Signing secret. Used in the browser only; never sent to the server. */
   secret?: string
+  /** Custom headers of the contract; only allow-listed names are sent. */
+  headers?: Record<string, string>
   disabled?: boolean
   className?: string
 }
@@ -31,6 +33,7 @@ export default function WebhookTestButton({
   network,
   rule,
   secret,
+  headers,
   disabled = false,
   className = '',
 }: WebhookTestButtonProps) {
@@ -66,6 +69,7 @@ export default function WebhookTestButton({
         network,
         rule,
         secret: secret?.trim() || undefined,
+        headers,
         signalOrTimeoutMs: controller.signal,
       })
       if (controller.signal.aborted) return

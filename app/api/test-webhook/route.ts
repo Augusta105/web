@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SIGNATURE_HEADER } from '@/lib/webhookSignature'
 import { parseCanonicalTestPayload } from '@/lib/api'
+import { selectTestDeliveryHeaders } from '@/lib/webhookHeaders'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
 import {
   BlockedAddressError,
@@ -124,7 +125,11 @@ export async function POST(req: NextRequest) {
   // Only dashboard-built test payloads are forwarded (#261), byte for byte,
   // with the browser's signature header passed through unchanged.
   const bodyString = body
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // Only allow-listed custom headers are forwarded (#408); the rest are dropped.
+  const headers: Record<string, string> = {
+    ...selectTestDeliveryHeaders(data.headers),
+    'Content-Type': 'application/json',
+  }
   if (typeof signature === 'string') headers[SIGNATURE_HEADER] = signature
 
   try {
