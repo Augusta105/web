@@ -10,6 +10,8 @@
 /coverage
 **/__snapshots__/
 *.snap
+testsnapshot*/
+**/testsnapshot*/
 /test-results/
 /playwright-report/
 /blob-report/
