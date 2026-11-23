@@ -24,6 +24,7 @@ import {
   BlockedAddressError,
   createRateLimiter,
   deliverWebhook,
+  redirectTarget,
   resolvePublicAddresses,
   vettedLookup,
 } from '../webhookProxy'
@@ -111,5 +112,34 @@ describe('createRateLimiter', () => {
     expect(limit('a', 2)).toEqual({ allowed: false, retryAfterMs: 59998 })
     expect(limit('b', 2).allowed).toBe(true)
     expect(limit('a', 60000).allowed).toBe(true)
+  })
+})
+
+describe('redirectTarget', () => {
+  const base = new URL('http://hooks.example.com/x')
+
+  it.each([
+    ['https://hooks.example.com/x', 'https://hooks.example.com/x'],
+    ['/x/', 'http://hooks.example.com/x/'],
+    ['https://a:b@moved.example/p?q=1#f', 'https://moved.example/p'],
+  ])('reduces %s to origin and path', (location, expected) => {
+    expect(redirectTarget(location, base)).toBe(expected)
+  })
+
+  it.each([
+    null,
+    undefined,
+    '',
+    '  ',
+    'javascript:alert(1)',
+    'ftp://x.example/',
+  ])('returns null for %j', (location) => {
+    expect(redirectTarget(location, base)).toBeNull()
+  })
+
+  it('returns null for an over-long target', () => {
+    expect(
+      redirectTarget(`https://x.example/${'a'.repeat(3000)}`, base)
+    ).toBeNull()
   })
 })
