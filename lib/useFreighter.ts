@@ -48,8 +48,12 @@ export function useFreighter() {
 
   useEffect(
     () =>
-      subscribeWallet((publicKey) => {
-        setState((prev) => ({ ...prev, publicKey, network: null }))
+      subscribeWallet((event) => {
+        setState((prev) => ({
+          ...prev,
+          publicKey: event.publicKey,
+          network: event.network ?? prev.network,
+        }))
       }),
     []
   )

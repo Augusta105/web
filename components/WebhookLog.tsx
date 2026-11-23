@@ -91,8 +91,6 @@ export function exportCSV(alerts: AlertPayload[], contractLabel?: string, networ
 }
 
 export default function WebhookLog({ alerts, network, contractLabel }: WebhookLogProps) {
-  const [selectedFilter, setSelectedFilter] = useState<AlertRuleType | null>(null)
-export default function WebhookLog({ alerts, network }: WebhookLogProps) {
   const searchParams = useSearchParams()
 
   const [selectedFilter, setSelectedFilter] = useState<AlertRuleType | null>(() => {
@@ -100,6 +98,9 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
     return r && isAlertRuleType(r) ? r : null
   })
   const [selectedAlert, setSelectedAlert] = useState<AlertPayload | null>(null)
+  const [showTestDeliveries, setShowTestDeliveries] = useState<boolean>(
+    () => searchParams?.get('test') === '1'
+  )
 
   // Refresh relative time labels every minute from the shared clock
   useNow(60_000)
@@ -156,6 +157,7 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
       from = Date.now() - days * DAY_MS
     }
     return alerts.filter((a) => {
+      if (!showTestDeliveries && a.is_test) return false
       if (selectedFilter && a.rule_triggered !== selectedFilter) return false
       if (a.timestamp < from || a.timestamp > to) return false
       if (
@@ -167,7 +169,7 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
       }
       return true
     })
-  }, [alerts, selectedFilter, debouncedSearch, range, customFrom, customTo, isInvertedRange])
+  }, [alerts, selectedFilter, debouncedSearch, range, customFrom, customTo, isInvertedRange, showTestDeliveries])
 
   const initialSort = (searchParams?.get('sort') === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc'
   const { sortedEntries, sortDirection, toggleSort } = useSortedLog(filteredAlerts, initialSort)
@@ -179,12 +181,13 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
 
   useEffect(() => {
     setPage(0)
-  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, pageSize, sortDirection])
+  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, pageSize, sortDirection, showTestDeliveries])
 
   // Mirror filters into URL search params
   useEffect(() => {
     const params = new URLSearchParams()
     if (selectedFilter) params.set('rule', selectedFilter)
+    if (showTestDeliveries) params.set('test', '1')
     if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim())
     if (range !== 'all') params.set('range', range)
     if (range === 'custom' && customFrom) params.set('from', customFrom)
@@ -197,7 +200,7 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
       const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
       window.history.replaceState(null, '', newUrl)
     }
-  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, sortDirection, currentPage])
+  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, sortDirection, currentPage, showTestDeliveries])
 
   if (alerts.length === 0) {
     return (
@@ -235,6 +238,17 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
             {RULE_META[type]?.label ?? type} ({ruleCounts.get(type)})
           </button>
         ))}
+        <button
+          onClick={() => setShowTestDeliveries((v) => !v)}
+          aria-pressed={showTestDeliveries}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            showTestDeliveries
+              ? 'bg-amber-600 text-white'
+              : 'border border-zinc-700 text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          {showTestDeliveries ? 'Hide test deliveries' : 'Show test deliveries'}
+        </button>
       </div>
 
       {/* Search and Date Range */}
@@ -352,7 +366,14 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
                       </time>
                     </td>
                     <td className="py-3 pr-4">
-                      <AlertRuleBadge type={alert.rule_triggered as AlertRuleType} />
+                      <span className="inline-flex items-center gap-2">
+                        <AlertRuleBadge type={alert.rule_triggered as AlertRuleType} />
+                        {alert.is_test && (
+                          <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                            Test
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="py-3 pr-4">
                       <span className="inline-flex items-center gap-2">

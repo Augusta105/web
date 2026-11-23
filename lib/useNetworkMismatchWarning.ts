@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Network } from '@/types'
 import { getWalletNetwork, networkMismatchWarning, readFreighterConnection } from '@/lib/freighter'
+import { subscribeWallet } from '@/lib/walletEvents'
 
 /**
  * Warns when the connected wallet's network does not match the selected
@@ -52,6 +53,26 @@ export function useNetworkMismatchWarning(network: Network, isConnected: boolean
       active = false
     }
   }, [network, isConnected])
+
+  // Re-check whenever the wallet broadcasts a change (e.g. a network switch in
+  // the extension) so the warning appears or clears without a reload.
+  useEffect(() => {
+    let active = true
+
+    const unsubscribe = subscribeWallet((event) => {
+      if (!active) return
+      if (event.network !== undefined) {
+        setNetworkWarning(networkMismatchWarning(event.network, network))
+        return
+      }
+      void checkNetworkMismatch()
+    })
+
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [network, checkNetworkMismatch])
 
   const clearNetworkWarning = useCallback(() => setNetworkWarning(null), [])
 
