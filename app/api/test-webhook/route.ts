@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { SIGNATURE_HEADER } from '@/lib/webhookSignature'
+import { parseSignatureHeader, SIGNATURE_HEADER } from '@/lib/webhookSignature'
 import { parseCanonicalTestPayload } from '@/lib/api'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
 import {
@@ -11,8 +11,6 @@ import {
 
 /** Request bodies are small ({ url, body, signature }). */
 const MAX_BODY_BYTES = 4096
-/** Signature computed in the browser over `body` (lib/webhookSignature). */
-const SIGNATURE_FORMAT = /^sha256=[0-9a-f]{64}$/
 const RATE_LIMIT = 10
 const RATE_WINDOW_MS = 60_000
 const TIMEOUT_MS = 10000
@@ -85,9 +83,11 @@ export async function POST(req: NextRequest) {
   if (typeof body !== 'string' || !parseCanonicalTestPayload(body)) {
     return fail(400, 'body must be a test payload built by the dashboard')
   }
+  // The browser signs `body` as `t=<unix>,v1=<hex>` (lib/webhookSignature).
+  // The proxy cannot verify it (it has no secret), so it only checks the shape.
   if (
     signature !== undefined &&
-    (typeof signature !== 'string' || !SIGNATURE_FORMAT.test(signature))
+    (typeof signature !== 'string' || !parseSignatureHeader(signature))
   ) {
     return fail(400, 'Invalid signature')
   }
