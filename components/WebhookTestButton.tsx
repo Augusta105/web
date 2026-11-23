@@ -14,7 +14,11 @@ type TestStatus = 'idle' | 'sending' | 'ok' | 'error'
 export function failureMessage(res: {
   status: number
   location?: string
+  error?: string
 }): string {
+  // The proxy's fixed message (e.g. "The receiver refused the connection")
+  // says more than the status of a delivery that never reached a receiver.
+  if (res.error) return `${res.error}.`
   const base = `Delivery failed with HTTP status ${res.status}.`
   if (res.status >= 300 && res.status < 400 && res.location) {
     return `${base} Receiver redirects to ${res.location} — update the webhook URL.`
