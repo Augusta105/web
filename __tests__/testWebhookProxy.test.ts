@@ -51,7 +51,11 @@ const testBody = (
   overrides: Partial<Parameters<typeof buildTestWebhookPayload>[0]> = {}
 ) =>
   JSON.stringify(
-    buildTestWebhookPayload({ contractId: CID, network: 'testnet', ...overrides })
+    buildTestWebhookPayload({
+      contractId: CID,
+      network: 'testnet',
+      ...overrides,
+    })
   )
 
 const valid = {
@@ -73,6 +77,29 @@ describe('POST /api/test-webhook', () => {
     expect(String(url)).toBe(valid.url)
     expect(sent).toBe(body)
     expect(headers[SIGNATURE_HEADER]).toBe(signature)
+  })
+
+  it.each([
+    ['the legacy sha256= form', `sha256=${'a'.repeat(64)}`],
+    ['a missing timestamp', `v1=${'a'.repeat(64)}`],
+    ['a non-numeric timestamp', `t=abc,v1=${'a'.repeat(64)}`],
+    ['a truncated MAC', `t=1700000000,v1=${'a'.repeat(62)}`],
+    ['a non-hex MAC', `t=1700000000,v1=${'z'.repeat(64)}`],
+    ['no v1 entry', 't=1700000000'],
+  ])('rejects a signature with %s', async (_label, signature) => {
+    const res = await POST(request({ ...valid, signature }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'Invalid signature' })
+    expect(deliverWebhook).not.toHaveBeenCalled()
+  })
+
+  it('accepts a timestamped signature with extra v1 entries', async () => {
+    const signature = await signWebhookPayload('whsec_rotated', valid.body)
+    const withExtra = `${signature},v1=${'b'.repeat(64)}`
+    const res = await POST(request({ ...valid, signature: withExtra }))
+    expect(res.status).toBe(200)
+    const [, , headers] = vi.mocked(deliverWebhook).mock.calls[0]
+    expect(headers[SIGNATURE_HEADER]).toBe(withExtra)
   })
 
   it('sends no signature header when the browser sent none', async () => {
@@ -106,7 +133,10 @@ describe('POST /api/test-webhook', () => {
 
   it.each([
     ['arbitrary JSON', '{"spam":true}'],
-    ['a non-test payload', testBody().replace('"is_test":true', '"is_test":false')],
+    [
+      'a non-test payload',
+      testBody().replace('"is_test":true', '"is_test":false'),
+    ],
     [
       'a payload with extra fields',
       JSON.stringify({ ...JSON.parse(testBody()), extra: 'x' }),
