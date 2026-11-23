@@ -57,6 +57,22 @@ export async function signWebhookPayload(
   return `t=${t},v1=${toHex(mac)}`
 }
 
+/**
+ * Strict form of the header the dashboard emits: one timestamp and one
+ * 64-hex `v1` MAC, `t=<unix seconds>,v1=<hex>`.
+ */
+const SIGNATURE_HEADER_FORMAT = /^t=(\d{1,12}),v1=[0-9a-f]{64}$/
+
+/**
+ * Parses a dashboard-built X-TxWatch-Signature value and returns its `t=`
+ * timestamp (Unix seconds), or null if it is not in the strict
+ * `t=<seconds>,v1=<64 hex>` form. Does not check the MAC.
+ */
+export function parseSignatureTimestamp(header: string): number | null {
+  const match = SIGNATURE_HEADER_FORMAT.exec(header)
+  return match ? Number(match[1]) : null
+}
+
 export type SignatureVerification =
   | { valid: true; timestamp: number }
   | { valid: false; reason: 'malformed' | 'stale' | 'mismatch' }
