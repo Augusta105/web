@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseSignatureHeader, SIGNATURE_HEADER } from '@/lib/webhookSignature'
 import { parseCanonicalTestPayload } from '@/lib/api'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
+import { createRateLimiter } from '@/lib/rateLimit'
+import { getClientIp, trustedProxyHops } from '@/lib/clientIp'
 import {
   BlockedAddressError,
-  createRateLimiter,
   deliverWebhook,
   resolvePublicAddresses,
 } from '@/lib/webhookProxy'
@@ -15,6 +16,7 @@ const RATE_LIMIT = 10
 const RATE_WINDOW_MS = 60_000
 const TIMEOUT_MS = 10000
 
+// Per process unless a shared store is passed; see docs/rate-limiting.md.
 const rateLimit = createRateLimiter(RATE_LIMIT, RATE_WINDOW_MS)
 
 const fail = (status: number, error: string, headers?: HeadersInit) =>
@@ -34,22 +36,14 @@ function isSameOrigin(req: NextRequest): boolean {
   }
 }
 
-function clientIp(req: NextRequest): string {
-  return (
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    req.headers.get('x-real-ip') ||
-    req.ip ||
-    'unknown'
-  )
-}
-
 export async function POST(req: NextRequest) {
   const startTime = Date.now()
 
   if (!isSameOrigin(req))
     return fail(403, 'Cross-origin requests are not allowed')
 
-  const limit = rateLimit(clientIp(req))
+  const clientIp = getClientIp(req.headers, req.ip, trustedProxyHops())
+  const limit = await rateLimit(clientIp)
   if (!limit.allowed) {
     return fail(429, 'Too many test webhook requests', {
       'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)),
