@@ -22,9 +22,7 @@ const mockContract = {
   label: 'Test Contract',
   contract_id: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
   network: 'testnet',
-  rules: [
-    { type: 'LargeTransfer', threshold_xlm: 1000 }
-  ],
+  rules: [{ type: 'LargeTransfer', threshold_xlm: 1000 }],
   webhook_url: 'https://webhook.site/test',
   created_at: Date.now(),
   updated_at: Date.now(),
@@ -69,6 +67,22 @@ Run with: `node mock-server.js`
 3. When real API is ready, update `NEXT_PUBLIC_API_URL`
 4. Tests verify API layer handles responses correctly
 
+## Assumed core fields
+
+The dashboard reads the fields below. They are optional and are not yet in
+`tx-watch-core`, so the dashboard must work without them. Each one needs a
+matching core change before it is relied on in production.
+
+| Object                         | Field             | Values                                                                        | Behaviour when absent                                          |
+| ------------------------------ | ----------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Alert payload (`AlertPayload`) | `delivery_status` | `success`, `failed`, `pending`                                                | No status badge. The dashboard never assumes `success` (#407). |
+| Contract (`WatchedContract`)   | `webhook_headers` | Map of header name to value; at most 5 names; no hop-by-hop headers or `Host` | No custom headers are sent (#408).                             |
+| Contract (`WatchedContract`)   | `webhook_format`  | `json`, `slack`, `discord`                                                    | `json`, the raw alert payload (#409).                          |
+
+Test deliveries only send the headers on the proxy allow-list
+(`authorization`, `x-api-key`, `x-auth-token`, `x-webhook-token`). Header values
+are credentials; see `docs/storage-schema.md`.
+
 ## Testing
 
 Use `apiFetch()` from `lib/api.ts` for all API calls. Mock `fetch` in tests with Vitest:
@@ -82,8 +96,11 @@ vi.mock('lib/api', () => ({
 }))
 
 // Or stub fetch globally
-vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-  ok: true,
-  json: async () => ({ data: [] }),
-}))
+vi.stubGlobal(
+  'fetch',
+  vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ data: [] }),
+  })
+)
 ```
