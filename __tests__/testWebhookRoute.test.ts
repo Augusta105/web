@@ -111,3 +111,51 @@ describe('POST /api/test-webhook redirects (#399)', () => {
     expect(body).not.toHaveProperty('location')
   })
 })
+
+describe('POST /api/test-webhook delivery errors (#402)', () => {
+  const fail = (code: string | undefined, message: string) =>
+    deliver.mockRejectedValueOnce(
+      Object.assign(new Error(message), code ? { code } : {})
+    )
+
+  it.each([
+    ['ECONNREFUSED', 'connect ECONNREFUSED 203.0.113.5:443', /refused/],
+    ['ECONNRESET', 'read ECONNRESET 203.0.113.5:443', /closed/],
+    ['ENOTFOUND', 'getaddrinfo ENOTFOUND 203.0.113.5', /resolve/],
+    ['CERT_HAS_EXPIRED', 'certificate has expired for 203.0.113.5', /TLS/],
+    [undefined, 'internal failure at 203.0.113.5', /Failed to deliver/],
+  ])(
+    'maps %s to a fixed message without internals',
+    async (code, message, expected) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        fail(code, message)
+        const res = await POST(request('https://hooks.example.com/x'))
+        const body = await res.json()
+        expect(res.status).toBe(502)
+        expect(body).toMatchObject({ status: 502, ok: false })
+        expect(body.error).toMatch(expected)
+        expect(JSON.stringify(body)).not.toContain('203.0.113.5')
+        // Details are logged server-side, without the payload.
+        expect(warn).toHaveBeenCalledTimes(1)
+        const logged = JSON.stringify(warn.mock.calls[0])
+        expect(logged).toContain('203.0.113.5')
+        expect(logged).toContain('hooks.example.com')
+        expect(logged).not.toMatch(/is_test|contract_id/)
+      } finally {
+        warn.mockRestore()
+      }
+    }
+  )
+
+  it('still reports a timeout as 504', async () => {
+    deliver.mockRejectedValueOnce(
+      Object.assign(new Error('Webhook request timed out'), {
+        name: 'TimeoutError',
+      })
+    )
+    const res = await POST(request('https://hooks.example.com/x'))
+    expect(res.status).toBe(504)
+    expect((await res.json()).error).toBe('Webhook request timed out')
+  })
+})
