@@ -11,6 +11,14 @@ export const SIGNATURE_HEADER = 'X-TxWatch-Signature'
 /** Default replay window receivers should accept, in seconds (5 minutes). */
 export const DEFAULT_SIGNATURE_TOLERANCE_SECONDS = 300
 
+/**
+ * Default grace period during which a rotated-out webhook secret keeps being
+ * accepted, in seconds (24 hours). During this window deliveries are signed
+ * with both the current and the previous secret so receivers can be
+ * redeployed without dropping events.
+ */
+export const DEFAULT_SECRET_ROTATION_GRACE_SECONDS = 24 * 60 * 60
+
 const toHex = (buf: ArrayBuffer): string =>
   Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join(
     ''
@@ -44,17 +52,44 @@ export function generateWebhookSecret(): string {
 
 /**
  * Computes the X-TxWatch-Signature value for a raw request body.
+ *
+ * When `previousSecret` is supplied (i.e. a rotation is in its grace period)
+ * the header carries two `v1=` entries: one for the current secret and one for
+ * the previous secret, so receivers holding either secret keep verifying.
+ *
  * @param timestamp Unix time in seconds; defaults to now.
  */
 export async function signWebhookPayload(
   secret: string,
   body: string,
-  timestamp: number = Math.floor(Date.now() / 1000)
+  timestamp: number = Math.floor(Date.now() / 1000),
+  previousSecret?: string | null
 ): Promise<string> {
   const t = Math.floor(timestamp)
-  const key = await hmacKey(secret, 'sign')
-  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(`${t}.${body}`))
-  return `t=${t},v1=${toHex(mac)}`
+  const data = enc.encode(`${t}.${body}`)
+  const sign = async (s: string): Promise<string> => {
+    const key = await hmacKey(s, 'sign')
+    return toHex(await crypto.subtle.sign('HMAC', key, data))
+  }
+  const entries = [`v1=${await sign(secret)}`]
+  if (previousSecret && previousSecret !== secret) {
+    entries.push(`v1=${await sign(previousSecret)}`)
+  }
+  return `t=${t},${entries.join(',')}`
+}
+
+/**
+ * Returns the previous secret to sign with, or null when no rotation is in
+ * progress or its grace window has elapsed.
+ * @param now Unix time in seconds; defaults to now.
+ */
+export function activePreviousSecret(
+  previousSecret: string | null | undefined,
+  previousSecretExpiresAt: number | null | undefined,
+  now: number = Math.floor(Date.now() / 1000)
+): string | null {
+  if (!previousSecret || previousSecretExpiresAt == null) return null
+  return now < previousSecretExpiresAt ? previousSecret : null
 }
 
 export type SignatureVerification =

@@ -91,6 +91,29 @@ export function parseWebhookSecret(value: unknown): string | undefined {
   return secret.length > 0 ? secret : undefined
 }
 
+/**
+ * Validates an untrusted previous webhook signing secret (e.g. from storage or
+ * an import file). Returns the trimmed secret, or undefined when absent/invalid.
+ */
+export function parseWebhookSecretPrevious(
+  value: unknown,
+): string | undefined {
+  return parseWebhookSecret(value)
+}
+
+/**
+ * Validates an untrusted expiry timestamp (epoch ms) for the previous webhook
+ * signing secret. Returns the timestamp, or undefined when absent/invalid.
+ */
+export function parseWebhookSecretPreviousExpiresAt(
+  value: unknown,
+): number | undefined {
+  if (typeof value !== 'number' || !isFinite(value) || value <= 0) {
+    return undefined
+  }
+  return value
+}
+
 export interface WatchedContract {
   id: string
   label: string
@@ -100,6 +123,16 @@ export interface WatchedContract {
   webhook_url: string
   /** Optional signing secret used to sign webhook deliveries. */
   webhook_secret?: string
+  /**
+   * Previous signing secret, kept during the rotation grace period so
+   * deliveries are signed with both secrets (two `v1=` entries).
+   */
+  webhook_secret_previous?: string
+  /**
+   * Expiry (epoch ms) of the rotation grace period. Once passed, the previous
+   * secret is no longer used for signing and can be discarded.
+   */
+  webhook_secret_previous_expires_at?: number
   /** Whether this contract is actively watched. Absent = true. */
   enabled?: boolean
   created_at: number
