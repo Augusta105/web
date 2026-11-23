@@ -299,15 +299,6 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
     )
   }
 
-  async function copySecret() {
-    if (!editedWebhookSecret) return
-    try {
-      await navigator.clipboard.writeText(editedWebhookSecret)
-    } catch {
-      // Clipboard unavailable; ignore
-    }
-  }
-
   function handleCancelMetadataEdit() {
     if (hasMetadataChanges()) {
       setShowUnsavedWarning(true)
@@ -492,14 +483,11 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
               >
                 {editedWebhookSecret ? 'Rotate' : 'Generate'}
               </button>
-              <button
-                type="button"
-                onClick={copySecret}
+              <CopyButton
+                text={editedWebhookSecret}
                 disabled={!editedWebhookSecret}
-                className="px-3 py-1.5 rounded-lg border border-zinc-700 text-sm text-zinc-300 hover:text-zinc-100 transition-colors disabled:opacity-50"
-              >
-                Copy
-              </button>
+                aria-label="Copy webhook secret"
+              />
             </div>
           </div>
 
