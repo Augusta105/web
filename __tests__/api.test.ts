@@ -5,8 +5,10 @@ import {
   describeRule,
   isApiConfigured,
   joinUrl,
+  parseCanonicalTestPayload,
   removeContract,
   sendTestWebhook,
+  TEST_PAYLOAD_MAX_SKEW_MS,
   TEST_TX_HASH,
 } from '@/lib/api'
 import { horizonUrl } from '@/lib/stellar'
@@ -491,5 +493,45 @@ describe('removeContract', () => {
     expect(url).toBe('http://api/contracts/abc123')
     expect(url).not.toContain('//contracts')
     expect((init as RequestInit).method).toBe('DELETE')
+  })
+})
+
+describe('parseCanonicalTestPayload timestamp window (#401)', () => {
+  const NOW = 1_700_000_000_000
+  const body = (timestamp: number) =>
+    JSON.stringify(
+      buildTestWebhookPayload({
+        contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+        timestamp,
+      })
+    )
+
+  it('accepts a payload within five minutes of now', () => {
+    expect(parseCanonicalTestPayload(body(NOW), { now: NOW })).not.toBeNull()
+    expect(
+      parseCanonicalTestPayload(body(NOW - TEST_PAYLOAD_MAX_SKEW_MS), {
+        now: NOW,
+      })
+    ).not.toBeNull()
+    expect(
+      parseCanonicalTestPayload(body(NOW + TEST_PAYLOAD_MAX_SKEW_MS), {
+        now: NOW,
+      })
+    ).not.toBeNull()
+  })
+
+  it.each([
+    ['just past the window', NOW - TEST_PAYLOAD_MAX_SKEW_MS - 1],
+    ['just ahead of the window', NOW + TEST_PAYLOAD_MAX_SKEW_MS + 1],
+    ['a year ahead', NOW + 365 * 24 * 3600 * 1000],
+    ['the epoch', 0],
+  ])('rejects a payload %s', (_label, timestamp) => {
+    expect(parseCanonicalTestPayload(body(timestamp), { now: NOW })).toBeNull()
+  })
+
+  it('honours a custom window', () => {
+    expect(
+      parseCanonicalTestPayload(body(NOW - 2000), { now: NOW, maxSkewMs: 1000 })
+    ).toBeNull()
   })
 })
