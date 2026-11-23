@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { sendTestWebhook } from '@/lib/api'
 import { validateWebhookUrl } from '@/lib/stellar'
-import type { AlertRule, Network } from '@/types'
+import type { AlertRule, Network, WebhookFormat } from '@/types'
 
 type TestStatus = 'idle' | 'sending' | 'ok' | 'error'
 
@@ -18,6 +18,8 @@ interface WebhookTestButtonProps {
   secret?: string
   /** Custom headers of the contract; only allow-listed names are sent. */
   headers?: Record<string, string>
+  /** Body shape the receiver expects. Absent = JSON. */
+  format?: WebhookFormat
   disabled?: boolean
   className?: string
 }
@@ -34,6 +36,7 @@ export default function WebhookTestButton({
   rule,
   secret,
   headers,
+  format,
   disabled = false,
   className = '',
 }: WebhookTestButtonProps) {
@@ -70,6 +73,7 @@ export default function WebhookTestButton({
         rule,
         secret: secret?.trim() || undefined,
         headers,
+        format,
         signalOrTimeoutMs: controller.signal,
       })
       if (controller.signal.aborted) return

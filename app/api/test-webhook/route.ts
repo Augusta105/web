@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SIGNATURE_HEADER } from '@/lib/webhookSignature'
 import { parseCanonicalTestPayload } from '@/lib/api'
+import { isWebhookFormat, type WebhookFormat } from '@/types'
 import { selectTestDeliveryHeaders } from '@/lib/webhookHeaders'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
 import {
@@ -10,8 +11,11 @@ import {
   resolvePublicAddresses,
 } from '@/lib/webhookProxy'
 
-/** Request bodies are small ({ url, body, signature }). */
-const MAX_BODY_BYTES = 4096
+/**
+ * Request bodies are small ({ url, body, signature, format, payload, headers }).
+ * Headers and the alert payload together can exceed 4 KB.
+ */
+const MAX_BODY_BYTES = 8192
 /**
  * Signature computed in the browser over `body` (lib/webhookSignature):
  * `t=<unix seconds>,v1=<hex HMAC-SHA256>`.
@@ -86,7 +90,14 @@ export async function POST(req: NextRequest) {
     return fail(400, 'Do not send the signing secret; send a signature')
   if (!url || typeof url !== 'string')
     return fail(400, 'A valid url is required')
-  if (typeof body !== 'string' || !parseCanonicalTestPayload(body)) {
+  // Default to the raw JSON payload; Slack and Discord bodies are checked
+  // against the alert they summarise (#409).
+  const format = data.format ?? 'json'
+  if (!isWebhookFormat(format)) return fail(400, 'Unsupported webhook format')
+  if (
+    typeof body !== 'string' ||
+    !parseCanonicalTestPayload(body, format as WebhookFormat, data.payload)
+  ) {
     return fail(400, 'body must be a test payload built by the dashboard')
   }
   if (

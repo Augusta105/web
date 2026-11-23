@@ -31,6 +31,17 @@ export function parseDeliveryStatus(
     : undefined
 }
 
+/** Body shape a receiver expects. `json` is the raw AlertPayload. */
+export const WEBHOOK_FORMATS = ['json', 'slack', 'discord'] as const
+export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number]
+
+export function isWebhookFormat(value: unknown): value is WebhookFormat {
+  return (
+    typeof value === 'string' &&
+    (WEBHOOK_FORMATS as readonly string[]).includes(value)
+  )
+}
+
 export function isAlertRuleType(value: unknown): value is AlertRuleType {
   return (
     typeof value === 'string' &&
@@ -119,6 +130,8 @@ export interface WatchedContract {
    * are credentials. Assumed core field, see docs/MOCK_API_STRATEGY.md.
    */
   webhook_headers?: Record<string, string>
+  /** Body shape for deliveries. Absent = `json`. Assumed core field, see docs/MOCK_API_STRATEGY.md. */
+  webhook_format?: WebhookFormat
   /** Whether this contract is actively watched. Absent = true. */
   enabled?: boolean
   created_at: number

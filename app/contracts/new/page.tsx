@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect, useMemo, useId } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertPayload, AlertRule, Network, WatchedContract, parseAlertRule } from '@/types'
+import { AlertPayload, AlertRule, Network, WatchedContract, WebhookFormat, parseAlertRule } from '@/types'
+import { suggestWebhookFormat } from '@/lib/webhookFormat'
+import WebhookFormatField from '@/components/WebhookFormatField'
 import {
   isValidContractId,
   normalizeContractId,
@@ -56,6 +58,9 @@ export default function NewContractPage() {
   const [webhookUrl, setWebhookUrl] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
   const [webhookHeaders, setWebhookHeaders] = useState<Record<string, string>>({})
+  const [webhookFormat, setWebhookFormat] = useState<WebhookFormat>('json')
+  // Until the user picks a format, the URL's suggestion is applied automatically.
+  const [formatTouched, setFormatTouched] = useState(false)
   const [webhookUrlWarning, setWebhookUrlWarning] = useState<string | null>(null)
   const [rules, setRules] = useState<AlertRule[]>([])
   
@@ -390,6 +395,7 @@ export default function NewContractPage() {
       webhook_secret: webhookSecret.trim() || undefined,
       webhook_headers:
         Object.keys(webhookHeaders).length > 0 ? webhookHeaders : undefined,
+      webhook_format: webhookFormat === 'json' ? undefined : webhookFormat,
       created_at: Date.now(),
       updated_at: Date.now(),
       enabled: true,
@@ -660,6 +666,7 @@ export default function NewContractPage() {
               onChange={(e) => {
                 const val = e.target.value
                 setWebhookUrl(val)
+                if (!formatTouched) setWebhookFormat(suggestWebhookFormat(val))
                 setErrors((prev) => ({ ...prev, webhook_url: undefined }))
                 const trimmed = val.trim()
                 if (!trimmed) {
@@ -693,6 +700,17 @@ export default function NewContractPage() {
               </div>
             )}
           </div>
+
+          {/* Payload format (#409) */}
+          <WebhookFormatField
+            id="new-contract-format"
+            format={webhookFormat}
+            suggestedFormat={suggestWebhookFormat(webhookUrl)}
+            onChange={(next) => {
+              setFormatTouched(true)
+              setWebhookFormat(next)
+            }}
+          />
 
           {/* Webhook Signing Secret */}
           <div>
@@ -814,6 +832,7 @@ export default function NewContractPage() {
             rule={testRule}
             secret={webhookSecret}
             headers={webhookHeaders}
+            format={webhookFormat}
           />
           {testStatus === 'ok' && <p className="text-xs text-emerald-400">Webhook delivered successfully.</p>}
           {testStatus === 'error' && <p className="text-xs text-red-400">{testError}</p>}
