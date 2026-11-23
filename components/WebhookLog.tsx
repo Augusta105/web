@@ -65,7 +65,11 @@ export function toWebhookEntry(alert: AlertPayload): WebhookEntry {
   }
 }
 
-export function exportCSV(alerts: AlertPayload[], contractLabel?: string, network?: string) {
+export function exportCSV(
+  alerts: AlertPayload[],
+  contractLabel?: string,
+  network?: string
+) {
   const headers = ['Time', 'Rule', 'Tx Hash', 'Function', 'Amount']
   const rows = alerts.map((a) => [
     new Date(a.timestamp).toISOString(),
@@ -90,28 +94,44 @@ export function exportCSV(alerts: AlertPayload[], contractLabel?: string, networ
   }, 1000)
 }
 
-export default function WebhookLog({ alerts, network, contractLabel }: WebhookLogProps) {
-  const [selectedFilter, setSelectedFilter] = useState<AlertRuleType | null>(null)
-export default function WebhookLog({ alerts, network }: WebhookLogProps) {
+export default function WebhookLog({
+  alerts,
+  network,
+  contractLabel,
+}: WebhookLogProps) {
   const searchParams = useSearchParams()
 
-  const [selectedFilter, setSelectedFilter] = useState<AlertRuleType | null>(() => {
-    const r = searchParams?.get('rule')
-    return r && isAlertRuleType(r) ? r : null
-  })
+  const [selectedFilter, setSelectedFilter] = useState<AlertRuleType | null>(
+    () => {
+      const r = searchParams?.get('rule')
+      return r && isAlertRuleType(r) ? r : null
+    }
+  )
   const [selectedAlert, setSelectedAlert] = useState<AlertPayload | null>(null)
 
   // Refresh relative time labels every minute from the shared clock
   useNow(60_000)
 
-  const [searchInput, setSearchInput] = useState(() => searchParams?.get('q') ?? '')
-  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams?.get('q') ?? '')
+  const [searchInput, setSearchInput] = useState(
+    () => searchParams?.get('q') ?? ''
+  )
+  const [debouncedSearch, setDebouncedSearch] = useState(
+    () => searchParams?.get('q') ?? ''
+  )
 
   const [range, setRange] = useState<DateRange>(() => {
     const r = searchParams?.get('range')
-    return (r === 'all' || r === '24h' || r === '7d' || r === '30d' || r === 'custom') ? r : 'all'
+    return r === 'all' ||
+      r === '24h' ||
+      r === '7d' ||
+      r === '30d' ||
+      r === 'custom'
+      ? r
+      : 'all'
   })
-  const [customFrom, setCustomFrom] = useState(() => searchParams?.get('from') ?? '')
+  const [customFrom, setCustomFrom] = useState(
+    () => searchParams?.get('from') ?? ''
+  )
   const [customTo, setCustomTo] = useState(() => searchParams?.get('to') ?? '')
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0])
 
@@ -167,10 +187,22 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
       }
       return true
     })
-  }, [alerts, selectedFilter, debouncedSearch, range, customFrom, customTo, isInvertedRange])
+  }, [
+    alerts,
+    selectedFilter,
+    debouncedSearch,
+    range,
+    customFrom,
+    customTo,
+    isInvertedRange,
+  ])
 
-  const initialSort = (searchParams?.get('sort') === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc'
-  const { sortedEntries, sortDirection, toggleSort } = useSortedLog(filteredAlerts, initialSort)
+  const initialSort = (searchParams?.get('sort') === 'asc' ? 'asc' : 'desc') as
+    'asc' | 'desc'
+  const { sortedEntries, sortDirection, toggleSort } = useSortedLog(
+    filteredAlerts,
+    initialSort
+  )
 
   const pageCount = Math.max(1, Math.ceil(sortedEntries.length / pageSize))
   const currentPage = Math.min(page, pageCount - 1)
@@ -179,7 +211,15 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
 
   useEffect(() => {
     setPage(0)
-  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, pageSize, sortDirection])
+  }, [
+    selectedFilter,
+    debouncedSearch,
+    range,
+    customFrom,
+    customTo,
+    pageSize,
+    sortDirection,
+  ])
 
   // Mirror filters into URL search params
   useEffect(() => {
@@ -194,10 +234,20 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
 
     const qs = params.toString()
     if (typeof window !== 'undefined') {
-      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+      const newUrl = qs
+        ? `${window.location.pathname}?${qs}`
+        : window.location.pathname
       window.history.replaceState(null, '', newUrl)
     }
-  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, sortDirection, currentPage])
+  }, [
+    selectedFilter,
+    debouncedSearch,
+    range,
+    customFrom,
+    customTo,
+    sortDirection,
+    currentPage,
+  ])
 
   if (alerts.length === 0) {
     return (
@@ -247,7 +297,11 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
           aria-label="Search alerts by transaction hash or function"
           className="flex-1 min-w-[12rem] rounded-lg border border-zinc-700 bg-transparent px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
         />
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Date range">
+        <div
+          className="flex flex-wrap gap-1"
+          role="group"
+          aria-label="Date range"
+        >
           {rangePresets.map((preset) => (
             <button
               key={preset.value}
@@ -310,7 +364,9 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
           </div>
         </div>
         {filteredAlerts.length === 0 ? (
-          <p className="text-sm text-zinc-500 py-4">No alerts match the selected filters.</p>
+          <p className="text-sm text-zinc-500 py-4">
+            No alerts match the selected filters.
+          </p>
         ) : (
           <>
             {/* Mobile card layout */}
@@ -328,12 +384,24 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
             <table className="hidden md:table w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 text-left">
-                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">Time</th>
-                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">Rule</th>
-                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">Tx Hash</th>
-                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">Function</th>
-                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">Amount</th>
-                  <th className="pb-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">Details</th>
+                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Time
+                  </th>
+                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Rule
+                  </th>
+                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Tx Hash
+                  </th>
+                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Function
+                  </th>
+                  <th className="pb-3 pr-4 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="pb-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    Details
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/50">
@@ -352,7 +420,9 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
                       </time>
                     </td>
                     <td className="py-3 pr-4">
-                      <AlertRuleBadge type={alert.rule_triggered as AlertRuleType} />
+                      <AlertRuleBadge
+                        type={alert.rule_triggered as AlertRuleType}
+                      />
                     </td>
                     <td className="py-3 pr-4">
                       <span className="inline-flex items-center gap-2">
@@ -371,10 +441,10 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
                     <td className="py-3 pr-4 font-mono text-zinc-400">
                       {alert.function_name ?? 'N/A'}
                     </td>
-                    <td className="py-3 text-zinc-400">
-                      {alert.amount !== undefined ? formatAmount(alert.amount) : 'N/A'}
                     <td className="py-3 pr-4 text-zinc-400">
-                      {alert.amount !== undefined ? `${formatAmount(alert.amount)} XLM` : 'N/A'}
+                      {alert.amount !== undefined
+                        ? `${formatAmount(alert.amount)} XLM`
+                        : 'N/A'}
                     </td>
                     <td className="py-3 text-right">
                       <button
@@ -413,7 +483,8 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
             </label>
             <div className="flex items-center gap-3">
               <span>
-                {pageStart + 1}–{pageStart + pageAlerts.length} of {sortedEntries.length}
+                {pageStart + 1}–{pageStart + pageAlerts.length} of{' '}
+                {sortedEntries.length}
               </span>
               <button
                 onClick={() => setPage(currentPage - 1)}
