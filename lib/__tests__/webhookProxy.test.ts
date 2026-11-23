@@ -24,6 +24,8 @@ import {
   BlockedAddressError,
   createRateLimiter,
   deliverWebhook,
+  describeDeliveryError,
+  GENERIC_DELIVERY_ERROR,
   redirectTarget,
   resolvePublicAddresses,
   vettedLookup,
@@ -141,5 +143,59 @@ describe('redirectTarget', () => {
     expect(
       redirectTarget(`https://x.example/${'a'.repeat(3000)}`, base)
     ).toBeNull()
+  })
+})
+
+describe('describeDeliveryError', () => {
+  const nodeError = (code: string, message: string) =>
+    Object.assign(new Error(message), { code })
+
+  it.each([
+    ['ECONNREFUSED', 'connect ECONNREFUSED 203.0.113.5:443', /refused/],
+    ['ECONNRESET', 'read ECONNRESET', /closed the connection/],
+    ['EPIPE', 'write EPIPE', /closed the connection/],
+    ['ENOTFOUND', 'getaddrinfo ENOTFOUND internal.corp', /resolve/],
+    ['EAI_AGAIN', 'getaddrinfo EAI_AGAIN internal.corp', /resolve/],
+    ['EHOSTUNREACH', 'connect EHOSTUNREACH 203.0.113.5:443', /unreachable/],
+    ['ETIMEDOUT', 'connect ETIMEDOUT 203.0.113.5:443', /timed out/],
+    ['CERT_HAS_EXPIRED', 'certificate has expired', /TLS certificate/],
+    [
+      'ERR_TLS_CERT_ALTNAME_INVALID',
+      "Hostname/IP does not match certificate's altnames: IP: 203.0.113.5",
+      /TLS certificate/,
+    ],
+    [
+      'DEPTH_ZERO_SELF_SIGNED_CERT',
+      'self-signed certificate',
+      /TLS certificate/,
+    ],
+    [
+      'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+      'unable to verify the first certificate',
+      /TLS certificate/,
+    ],
+    [
+      'ERR_SSL_WRONG_VERSION_NUMBER',
+      'ssl3_get_record:wrong version number',
+      /TLS certificate/,
+    ],
+  ])('maps %s to a fixed message', (code, message, expected) => {
+    const described = describeDeliveryError(nodeError(code, message))
+    expect(described.code).toBe(code)
+    expect(described.message).toMatch(expected)
+    expect(described.message).not.toContain('203.0.113.5')
+    expect(described.message).not.toContain(message)
+  })
+
+  it.each([
+    ['an unknown code', nodeError('EWHATEVER', 'secret detail 10.0.0.1')],
+    ['an error without a code', new Error('internal 10.0.0.1')],
+    ['a non-error', 'boom 10.0.0.1'],
+    ['null', null],
+    ['undefined', undefined],
+  ])('falls back to the generic message for %s', (_label, error) => {
+    const described = describeDeliveryError(error)
+    expect(described.message).toBe(GENERIC_DELIVERY_ERROR)
+    expect(described.message).not.toMatch(/10\.0\.0\.1/)
   })
 })
