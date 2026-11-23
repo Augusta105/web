@@ -129,6 +129,11 @@ export interface TestWebhookResult {
   bodySnippet?: string | null
   /** Why the delivery could not be made (e.g. blocked URL, timeout). */
   error?: string
+  /**
+   * Where a 3xx receiver redirects to (origin and path only). Redirects are
+   * never followed, so this tells the user which URL to configure instead.
+   */
+  location?: string
 }
 
 /**
@@ -413,6 +418,7 @@ export async function sendTestWebhook(
         durationMs?: number
         bodySnippet?: string | null
         error?: string
+        location?: unknown
       }
       return {
         status: typeof data.status === 'number' ? data.status : proxyRes.status,
@@ -420,6 +426,9 @@ export async function sendTestWebhook(
         durationMs: data.durationMs,
         bodySnippet: data.bodySnippet ?? null,
         ...(data.error ? { error: data.error } : {}),
+        ...(typeof data.location === 'string' && data.location
+          ? { location: data.location }
+          : {}),
       }
     }
 
