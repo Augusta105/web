@@ -35,6 +35,7 @@ import { SIGNATURE_HEADER, signWebhookPayload } from '@/lib/webhookSignature'
 const CID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4'
 let ipCounter = 0
 
+/** `ip` is the socket address (NextRequest.ip), not a forwarded header. */
 function request(
   body: unknown,
   headers: Record<string, string> = { 'sec-fetch-site': 'same-origin' },
@@ -42,7 +43,8 @@ function request(
 ) {
   const text = typeof body === 'string' ? body : JSON.stringify(body)
   return {
-    headers: new Headers({ 'x-forwarded-for': ip, ...headers }),
+    headers: new Headers(headers),
+    ip,
     text: async () => text,
   } as unknown as NextRequest
 }
@@ -202,6 +204,62 @@ describe('POST /api/test-webhook', () => {
     const limited = await POST(request(valid, undefined, '198.51.100.7'))
     expect(limited.status).toBe(429)
     expect(limited.headers.get('Retry-After')).toMatch(/^\d+$/)
+  })
+
+  describe('rate-limit client IP', () => {
+    const sameOrigin = { 'sec-fetch-site': 'same-origin' }
+
+    afterEach(() => vi.unstubAllEnvs())
+
+    it('ignores a spoofed X-Forwarded-For when no hops are trusted', async () => {
+      const statuses: number[] = []
+      for (let i = 0; i < 11; i++) {
+        const res = await POST(
+          request(
+            valid,
+            { ...sameOrigin, 'x-forwarded-for': `10.30.0.${i}` },
+            '192.0.2.10'
+          )
+        )
+        statuses.push(res.status)
+      }
+      expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true)
+      expect(statuses[10]).toBe(429)
+    })
+
+    it('keys the limit on the trusted hop when TRUSTED_PROXY_HOPS=1', async () => {
+      vi.stubEnv('TRUSTED_PROXY_HOPS', '1')
+      const statuses: number[] = []
+      for (let i = 0; i < 11; i++) {
+        // Each request claims a new spoofed client on the left; the proxy
+        // appended the real client (192.0.2.20) on the right.
+        const res = await POST(
+          request(
+            valid,
+            { ...sameOrigin, 'x-forwarded-for': `10.40.0.${i}, 192.0.2.20` },
+            '10.0.0.1'
+          )
+        )
+        statuses.push(res.status)
+      }
+      expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true)
+      expect(statuses[10]).toBe(429)
+    })
+
+    it('gives distinct real clients behind the proxy separate windows', async () => {
+      vi.stubEnv('TRUSTED_PROXY_HOPS', '1')
+      const from = (client: string) =>
+        request(
+          valid,
+          { ...sameOrigin, 'x-forwarded-for': `6.6.6.6, ${client}` },
+          '10.0.0.1'
+        )
+      for (let i = 0; i < 10; i++) {
+        expect((await POST(from('192.0.2.30'))).status).toBe(200)
+      }
+      expect((await POST(from('192.0.2.30'))).status).toBe(429)
+      expect((await POST(from('192.0.2.31'))).status).toBe(200)
+    })
   })
 
   it('caps the body size', async () => {
