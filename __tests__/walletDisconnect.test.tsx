@@ -221,6 +221,49 @@ describe('wallet state broadcast', () => {
     otherTab.close()
   })
 
+  it('keeps the shared channel open for remaining subscribers after one unsubscribes', async () => {
+    const firstReceived: Array<{ publicKey: string | null }> = []
+    const secondReceived: Array<{ publicKey: string | null }> = []
+
+    const unsubscribeFirst = subscribeWallet((detail) => {
+      firstReceived.push({ publicKey: detail.publicKey })
+    })
+    const unsubscribeSecond = subscribeWallet((detail) => {
+      secondReceived.push({ publicKey: detail.publicKey })
+    })
+
+    // Unmounting one wallet-aware component must not tear down the channel
+    // that the other subscribers are still listening on.
+    unsubscribeFirst()
+
+    const otherTab = new BroadcastChannel('txwatch-wallet')
+    otherTab.postMessage({ publicKey: MOCK_PUBLIC_KEY })
+
+    await waitFor(() => {
+      expect(secondReceived).toEqual([{ publicKey: MOCK_PUBLIC_KEY }])
+    })
+    expect(firstReceived).toEqual([])
+
+    // The channel is only closed once the last subscriber goes away.
+    unsubscribeSecond()
+    otherTab.close()
+
+    const afterCloseReceived: Array<{ publicKey: string | null }> = []
+    const unsubscribeThird = subscribeWallet((detail) => {
+      afterCloseReceived.push({ publicKey: detail.publicKey })
+    })
+
+    const lateTab = new BroadcastChannel('txwatch-wallet')
+    lateTab.postMessage({ publicKey: null })
+
+    await waitFor(() => {
+      expect(afterCloseReceived).toEqual([{ publicKey: null }])
+    })
+
+    unsubscribeThird()
+    lateTab.close()
+  })
+
   it('falls back to the local event when BroadcastChannel is unavailable', async () => {
     const original = globalThis.BroadcastChannel
     // @ts-expect-error - simulate an environment without BroadcastChannel

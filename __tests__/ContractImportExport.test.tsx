@@ -246,6 +246,71 @@ describe('ContractImportExport', () => {
     clickSpy.mockRestore()
   })
 
+  it('omits webhook_secret from JSON exports when "Include signing secrets" is unchecked', async () => {
+    const createObjectURL = jest.fn(() => 'blob:mock')
+    Object.defineProperty(URL, 'createObjectURL', { value: createObjectURL, configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: jest.fn(), configurable: true })
+
+    let capturedBlob: Blob | undefined
+    createObjectURL.mockImplementation((blob: Blob) => {
+      capturedBlob = blob
+      return 'blob:mock'
+    })
+    const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<ContractImportExport />)
+    upload(JSON.stringify({ version: 1, contracts: [entry({ webhook_secret: 'whsec_abc123' })] }))
+    fireEvent.click(await screen.findByText('Apply import'))
+    await waitFor(() => expect(getContracts()).toHaveLength(1))
+
+    const checkbox = screen.getByLabelText('Include signing secrets') as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
+
+    fireEvent.click(screen.getByLabelText('Export contracts only'))
+    fireEvent.click(screen.getByText('Export'))
+
+    await waitFor(() => expect(capturedBlob).toBeDefined())
+    const text = await capturedBlob!.text()
+    expect(text).not.toContain('whsec_abc123')
+    expect(text).not.toContain('webhook_secret')
+
+    clickSpy.mockRestore()
+  })
+
+  it('includes webhook_secret in JSON exports when "Include signing secrets" is checked', async () => {
+    const createObjectURL = jest.fn(() => 'blob:mock')
+    Object.defineProperty(URL, 'createObjectURL', { value: createObjectURL, configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: jest.fn(), configurable: true })
+
+    let capturedBlob: Blob | undefined
+    createObjectURL.mockImplementation((blob: Blob) => {
+      capturedBlob = blob
+      return 'blob:mock'
+    })
+    const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<ContractImportExport />)
+    upload(JSON.stringify({ version: 1, contracts: [entry({ webhook_secret: 'whsec_abc123' })] }))
+    fireEvent.click(await screen.findByText('Apply import'))
+    await waitFor(() => expect(getContracts()).toHaveLength(1))
+
+    fireEvent.click(screen.getByLabelText('Include signing secrets'))
+    fireEvent.click(screen.getByLabelText('Export contracts only'))
+    fireEvent.click(screen.getByText('Export'))
+
+    await waitFor(() => expect(capturedBlob).toBeDefined())
+    const parsed = JSON.parse(await capturedBlob!.text())
+    expect(parsed.contracts[0].webhook_secret).toBe('whsec_abc123')
+
+    clickSpy.mockRestore()
+  })
+
+  it('warns on import that secrets must be re-entered when they are missing', async () => {
+    render(<ContractImportExport />)
+    upload(JSON.stringify({ version: 1, contracts: [entry()] }))
+    expect(await screen.findByTestId('import-preview')).toHaveTextContent(/re-enter/i)
+  })
+
   it('re-keys alerts instead of deleting them when a replaced contract matches by (contract_id, network)', async () => {
     localStorage.setItem(
       'txwatch:alerts',

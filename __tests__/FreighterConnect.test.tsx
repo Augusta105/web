@@ -200,7 +200,28 @@ describe('FreighterConnect', () => {
       })
     })
 
-    it('opens the install page with noopener,noreferrer', async () => {
+    it('does not auto-open the install page after a failed connect', async () => {
+      mockExtensionMissing()
+      const windowOpenSpy = vi
+        .spyOn(window, 'open')
+        .mockImplementation(() => null)
+
+      render(<FreighterConnect />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: /Connect Freighter/ })
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(/Freighter not installed/)).toBeInTheDocument()
+      })
+
+      expect(windowOpenSpy).not.toHaveBeenCalled()
+
+      windowOpenSpy.mockRestore()
+    })
+
+    it('opens the install page with noopener,noreferrer when the link is clicked', async () => {
       mockExtensionMissing()
       const windowOpenSpy = vi
         .spyOn(window, 'open')

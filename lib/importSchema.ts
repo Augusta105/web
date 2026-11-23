@@ -78,12 +78,31 @@ function normalizeFunctionNames(names: string[]): string[] | string {
   return valid
 }
 
-export function buildSnapshot(contracts: WatchedContract[]): ContractsSnapshot {
+export interface BuildSnapshotOptions {
+  /** When true, webhook signing secrets are included in the export. */
+  includeSecrets?: boolean
+}
+
+/**
+ * Builds a contracts-only export snapshot. Webhook signing secrets are
+ * stripped unless `includeSecrets` is explicitly enabled, matching the CSV
+ * export behaviour of never leaking secrets by default.
+ */
+export function buildSnapshot(
+  contracts: WatchedContract[],
+  options: BuildSnapshotOptions = {}
+): ContractsSnapshot {
+  const includeSecrets = options.includeSecrets === true
+  const serialized = contracts.map((contract) => {
+    if (includeSecrets) return contract
+    const { webhook_secret: _secret, ...rest } = contract
+    return rest
+  })
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    count: contracts.length,
-    contracts,
+    count: serialized.length,
+    contracts: serialized,
   }
 }
 
