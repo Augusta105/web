@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SIGNATURE_HEADER } from '@/lib/webhookSignature'
 import { parseCanonicalTestPayload } from '@/lib/api'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
+import type { LookupAddress } from 'node:dns'
 import {
   BlockedAddressError,
   createRateLimiter,
@@ -15,12 +16,22 @@ const MAX_BODY_BYTES = 4096
 const SIGNATURE_FORMAT = /^sha256=[0-9a-f]{64}$/
 const RATE_LIMIT = 10
 const RATE_WINDOW_MS = 60_000
+/**
+ * Absolute deadline for the whole delivery: DNS pre-check, connect, TLS,
+ * response headers and body. Not an idle timeout (#398).
+ */
 const TIMEOUT_MS = 10000
 
 const rateLimit = createRateLimiter(RATE_LIMIT, RATE_WINDOW_MS)
 
 const fail = (status: number, error: string, headers?: HeadersInit) =>
   NextResponse.json({ ok: false, error }, { status, headers })
+
+const timedOut = (durationMs: number) =>
+  NextResponse.json(
+    { status: 504, ok: false, durationMs, error: 'Webhook request timed out' },
+    { status: 504 }
+  )
 
 /** Only the dashboard itself may use the proxy (#261). */
 function isSameOrigin(req: NextRequest): boolean {
@@ -103,16 +114,23 @@ export async function POST(req: NextRequest) {
   }
 
   // SSRF prevention (#259, #260): reject non-public IP literals and names that
-  // resolve to any non-public address. deliverWebhook re-checks at connect time.
+  // resolve to any non-public address. The vetted addresses are then pinned
+  // for the connection, so the name is resolved once and cannot rebind.
   if (classifyHost(parsedUrl.hostname) !== 'public') {
     return fail(403, 'Private and loopback target URLs are blocked')
   }
+  // One deadline covers the lookup and the delivery together (#398).
+  const deadline = AbortSignal.timeout(TIMEOUT_MS)
+  let addresses: LookupAddress[] | undefined
   if (!isIpLiteral(parsedUrl.hostname)) {
     try {
-      await resolvePublicAddresses(parsedUrl.hostname)
+      addresses = await resolvePublicAddresses(parsedUrl.hostname, deadline)
     } catch (err) {
       if (err instanceof BlockedAddressError) {
         return fail(403, 'Private and loopback target URLs are blocked')
+      }
+      if ((err as { name?: string })?.name === 'TimeoutError') {
+        return timedOut(Date.now() - startTime)
       }
       return fail(400, 'Could not resolve the webhook host')
     }
@@ -125,7 +143,14 @@ export async function POST(req: NextRequest) {
   if (typeof signature === 'string') headers[SIGNATURE_HEADER] = signature
 
   try {
-    const res = await deliverWebhook(parsedUrl, bodyString, headers, TIMEOUT_MS)
+    const remainingMs = Math.max(1, TIMEOUT_MS - (Date.now() - startTime))
+    const res = await deliverWebhook(
+      parsedUrl,
+      bodyString,
+      headers,
+      remainingMs,
+      { addresses, signal: deadline }
+    )
     const durationMs = Date.now() - startTime
     return NextResponse.json({
       status: res.status,
@@ -139,17 +164,7 @@ export async function POST(req: NextRequest) {
       return fail(403, 'Private and loopback target URLs are blocked')
     }
     const err = error as { name?: string; message?: string } | undefined
-    if (err?.name === 'TimeoutError') {
-      return NextResponse.json(
-        {
-          status: 504,
-          ok: false,
-          durationMs,
-          error: 'Webhook request timed out',
-        },
-        { status: 504 }
-      )
-    }
+    if (err?.name === 'TimeoutError') return timedOut(durationMs)
     return NextResponse.json(
       {
         status: 500,
