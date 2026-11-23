@@ -48,7 +48,9 @@ export default function WebhookFormatField({
         {suggestedFormat !== format && (
           <>
             {' '}
-            Suggested for this URL: {WEBHOOK_FORMAT_LABELS[suggestedFormat]}.{' '}
+            Suggested for this URL: {
+              WEBHOOK_FORMAT_LABELS[suggestedFormat]
+            }.{' '}
             <button
               type="button"
               onClick={() => onChange(suggestedFormat)}

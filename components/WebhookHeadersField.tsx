@@ -28,7 +28,10 @@ function rowsToHeaders(rows: HeaderRow[]): Record<string, string> {
   const result: Record<string, string> = {}
   for (const row of rows) {
     const name = row.name.trim()
-    if (isValidWebhookHeaderName(name) && isValidWebhookHeaderValue(row.value)) {
+    if (
+      isValidWebhookHeaderName(name) &&
+      isValidWebhookHeaderValue(row.value)
+    ) {
       result[name] = row.value.trim()
     }
   }
@@ -80,17 +83,25 @@ export default function WebhookHeadersField({
   }
 
   function editRow(key: number, field: 'name' | 'value', text: string) {
-    update(rows.map((row) => (row.key === key ? { ...row, [field]: text } : row)))
+    update(
+      rows.map((row) => (row.key === key ? { ...row, [field]: text } : row))
+    )
   }
 
   return (
     <fieldset className="space-y-2">
-      <legend className="text-sm font-medium text-zinc-300">Custom headers</legend>
+      <legend className="text-sm font-medium text-zinc-300">
+        Custom headers
+      </legend>
       <p className="text-xs text-zinc-500">
-        Sent with each delivery, for receivers that need an Authorization or API-key
-        header. Values are masked here and left out of CSV exports. They are stored in
-        this browser with the contract, like the signing secret. Test deliveries send
-        only {TEST_DELIVERY_HEADER_ALLOWLIST.map((name) => titleCase(name)).join(', ')}.
+        Sent with each delivery, for receivers that need an Authorization or
+        API-key header. Values are masked here and left out of CSV exports. They
+        are stored in this browser with the contract, like the signing secret.
+        Test deliveries send only{' '}
+        {TEST_DELIVERY_HEADER_ALLOWLIST.map((name) => titleCase(name)).join(
+          ', '
+        )}
+        .
       </p>
 
       {rows.map((row, index) => {
