@@ -98,6 +98,25 @@ describe('WebhookTestButton', () => {
     )
   })
 
+  it('shows the proxy error instead of its status', async () => {
+    send.mockResolvedValue({
+      status: 502,
+      ok: false,
+      error: 'The receiver refused the connection',
+    })
+    render(
+      <WebhookTestButton
+        url="https://hooks.example.com/x"
+        contractId={CID}
+        network="testnet"
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /test webhook/i }))
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('The receiver refused the connection.')
+    expect(status).not.toHaveTextContent(/502/)
+  })
+
   it('does not mention a redirect when no target is known', async () => {
     send.mockResolvedValue({ status: 302, ok: false })
     render(
