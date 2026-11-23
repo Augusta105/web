@@ -1,16 +1,22 @@
 import { vi } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
-import WebhookLog from '@/components/WebhookLog'
+import WebhookLog, { toWebhookEntry } from '@/components/WebhookLog'
 import { AlertPayload } from '@/types'
 import { formatRelativeTime } from '@/lib/format'
 
-const explorerTxUrl = vi.fn((network: string, hash: string) => `https://stellar.expert/explorer/${network}/tx/${hash}`)
+const explorerTxUrl = vi.fn(
+  (network: string, hash: string) =>
+    `https://stellar.expert/explorer/${network}/tx/${hash}`
+)
 
 vi.mock('@/lib/stellar', () => ({
-  explorerTxUrl: (network: string, hash: string) => explorerTxUrl(network, hash),
+  explorerTxUrl: (network: string, hash: string) =>
+    explorerTxUrl(network, hash),
   // WebhookLog also calls truncateId; omitting it made every render throw.
   truncateId: (id: string, chars = 8) =>
-    id.length <= chars * 2 + 3 ? id : `${id.slice(0, chars)}...${id.slice(-chars)}`,
+    id.length <= chars * 2 + 3
+      ? id
+      : `${id.slice(0, chars)}...${id.slice(-chars)}`,
 }))
 
 const baseAlert: AlertPayload = {
@@ -18,7 +24,8 @@ const baseAlert: AlertPayload = {
   contract_id: 'C123',
   network: 'testnet',
   rule_triggered: 'LargeTransfer',
-  transaction_hash: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+  transaction_hash:
+    'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
   timestamp: new Date('2024-01-15T12:00:00Z').getTime(),
   horizon_link: 'https://horizon-testnet.stellar.org/transactions/abcdef',
 }
@@ -45,18 +52,39 @@ describe('WebhookLog', () => {
   it('renders explorer link with shortened tx hash', () => {
     render(<WebhookLog alerts={[baseAlert]} network="testnet" />)
     const link = screen.getByRole('link', { name: /abcdef12/ })
-    expect(link).toHaveAttribute('href', expect.stringContaining(baseAlert.transaction_hash))
+    expect(link).toHaveAttribute(
+      'href',
+      expect.stringContaining(baseAlert.transaction_hash)
+    )
     expect(link).toHaveAttribute('target', '_blank')
   })
 
   it('prefers the alert network over the contract network prop', () => {
-    render(<WebhookLog alerts={[{ ...baseAlert, network: 'mainnet' }]} network="testnet" />)
-    expect(explorerTxUrl).toHaveBeenCalledWith('mainnet', baseAlert.transaction_hash)
+    render(
+      <WebhookLog
+        alerts={[{ ...baseAlert, network: 'mainnet' }]}
+        network="testnet"
+      />
+    )
+    expect(explorerTxUrl).toHaveBeenCalledWith(
+      'mainnet',
+      baseAlert.transaction_hash
+    )
   })
 
   it('falls back to the contract network prop when alert network is invalid', () => {
-    render(<WebhookLog alerts={[{ ...baseAlert, network: 'not-a-network' as AlertPayload['network'] }]} network="testnet" />)
-    expect(explorerTxUrl).toHaveBeenCalledWith('testnet', baseAlert.transaction_hash)
+    render(
+      <WebhookLog
+        alerts={[
+          { ...baseAlert, network: 'not-a-network' as AlertPayload['network'] },
+        ]}
+        network="testnet"
+      />
+    )
+    expect(explorerTxUrl).toHaveBeenCalledWith(
+      'testnet',
+      baseAlert.transaction_hash
+    )
   })
 
   it('renders a secondary Horizon link when horizon_link is provided', () => {
@@ -67,8 +95,15 @@ describe('WebhookLog', () => {
   })
 
   it('does not render a Horizon link when horizon_link is missing', () => {
-    render(<WebhookLog alerts={[{ ...baseAlert, horizon_link: undefined }]} network="testnet" />)
-    expect(screen.queryByRole('link', { name: /horizon/i })).not.toBeInTheDocument()
+    render(
+      <WebhookLog
+        alerts={[{ ...baseAlert, horizon_link: undefined }]}
+        network="testnet"
+      />
+    )
+    expect(
+      screen.queryByRole('link', { name: /horizon/i })
+    ).not.toBeInTheDocument()
   })
 
   it('renders timestamp', () => {
@@ -77,22 +112,39 @@ describe('WebhookLog', () => {
   })
 
   it('shows N/A for missing function_name', () => {
-    render(<WebhookLog alerts={[{ ...baseAlert, function_name: undefined }]} network="testnet" />)
+    render(
+      <WebhookLog
+        alerts={[{ ...baseAlert, function_name: undefined }]}
+        network="testnet"
+      />
+    )
     expect(screen.getAllByText('N/A').length).toBeGreaterThan(0)
   })
 
   it('shows function_name when present', () => {
-    render(<WebhookLog alerts={[{ ...baseAlert, function_name: 'transfer' }]} network="testnet" />)
+    render(
+      <WebhookLog
+        alerts={[{ ...baseAlert, function_name: 'transfer' }]}
+        network="testnet"
+      />
+    )
     expect(screen.getByText('transfer')).toBeInTheDocument()
   })
 
   it('shows N/A for missing amount', () => {
-    render(<WebhookLog alerts={[{ ...baseAlert, amount: undefined }]} network="testnet" />)
+    render(
+      <WebhookLog
+        alerts={[{ ...baseAlert, amount: undefined }]}
+        network="testnet"
+      />
+    )
     expect(screen.getAllByText('N/A').length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows formatted amount when present', () => {
-    render(<WebhookLog alerts={[{ ...baseAlert, amount: 100 }]} network="testnet" />)
+    render(
+      <WebhookLog alerts={[{ ...baseAlert, amount: 100 }]} network="testnet" />
+    )
     expect(screen.getByText('100.0000000 XLM')).toBeInTheDocument()
     expect(screen.queryByText(/XLM XLM/)).not.toBeInTheDocument()
   })
@@ -229,3 +281,14 @@ describe('WebhookLog', () => {
   })
 })
 
+describe('toWebhookEntry delivery status', () => {
+  it('carries the reported delivery status through', () => {
+    expect(
+      toWebhookEntry({ ...baseAlert, delivery_status: 'failed' }).status
+    ).toBe('failed')
+  })
+
+  it('leaves status undefined when the core reports none', () => {
+    expect(toWebhookEntry(baseAlert).status).toBeUndefined()
+  })
+})
