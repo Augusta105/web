@@ -114,6 +114,11 @@ export interface WatchedContract {
   webhook_url: string
   /** Optional signing secret used to sign webhook deliveries. */
   webhook_secret?: string
+  /**
+   * Extra headers sent with each delivery, e.g. an Authorization token. Values
+   * are credentials. Assumed core field, see docs/MOCK_API_STRATEGY.md.
+   */
+  webhook_headers?: Record<string, string>
   /** Whether this contract is actively watched. Absent = true. */
   enabled?: boolean
   created_at: number

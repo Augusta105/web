@@ -1,5 +1,6 @@
 import type { AlertRule, Network, WatchedContract } from '@/types'
 import { isAlertRuleType, parseAlertRule } from '@/types'
+import { parseWebhookHeaders } from '@/lib/webhookHeaders'
 import {
   isValidContractId,
   validateWebhookUrl,
@@ -183,8 +184,10 @@ const WEBHOOK_URL_IMPORT_ERRORS: Record<
 > = {
   invalid_url: 'invalid webhook_url: must be a valid URL',
   credentials_in_url: 'invalid webhook_url: must not contain credentials',
-  http_on_mainnet: 'invalid webhook_url: http is not allowed on mainnet; use https',
-  loopback_not_allowed: 'invalid webhook_url: loopback addresses are not allowed',
+  http_on_mainnet:
+    'invalid webhook_url: http is not allowed on mainnet; use https',
+  loopback_not_allowed:
+    'invalid webhook_url: loopback addresses are not allowed',
   private_ip_not_allowed:
     'invalid webhook_url: private network addresses are not allowed',
   link_local_not_allowed:
@@ -201,13 +204,18 @@ export function validateContractEntry(
   if (typeof e.contract_id !== 'string' || !isValidContractId(e.contract_id))
     return 'invalid contract_id'
   if (!NETWORKS.includes(e.network as Network)) return 'invalid network'
-  if (typeof e.webhook_url !== 'string') return 'invalid webhook_url: must be a string'
+  if (typeof e.webhook_url !== 'string')
+    return 'invalid webhook_url: must be a string'
   const urlResult = validateWebhookUrl(e.webhook_url, e.network as Network)
   if (!urlResult.valid && urlResult.code && urlResult.code !== 'http_warning') {
     return WEBHOOK_URL_IMPORT_ERRORS[urlResult.code]
   }
   if (e.webhook_secret !== undefined && typeof e.webhook_secret !== 'string') {
     return 'webhook_secret must be a string'
+  }
+  const webhookHeaders = parseWebhookHeaders(e.webhook_headers)
+  if (webhookHeaders === null) {
+    return 'invalid webhook_headers: must be a map of up to 5 valid header names to values'
   }
   if (!Array.isArray(e.rules)) return 'rules must be an array'
   const rules: AlertRule[] = []
@@ -232,6 +240,9 @@ export function validateContractEntry(
   if (typeof e.enabled === 'boolean') contract.enabled = e.enabled
   if (typeof e.webhook_secret === 'string' && e.webhook_secret.trim()) {
     contract.webhook_secret = e.webhook_secret.trim()
+  }
+  if (Object.keys(webhookHeaders).length > 0) {
+    contract.webhook_headers = webhookHeaders
   }
   return contract
 }
