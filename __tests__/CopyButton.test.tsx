@@ -129,3 +129,21 @@ describe('CopyButton', () => {
     })
   })
 })
+
+describe('CopyButton disabled', () => {
+  it('is disabled and never copies while disabled', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
+    render(<CopyButton text="whsec_empty" disabled />)
+    const btn = screen.getByRole('button', { name: 'Copy to clipboard' })
+    expect(btn).toBeDisabled()
+
+    fireEvent.click(btn)
+    expect(writeText).not.toHaveBeenCalled()
+    expect(screen.getByRole('status')).toHaveTextContent('')
+  })
+})
