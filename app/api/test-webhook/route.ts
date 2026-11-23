@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { SIGNATURE_HEADER } from '@/lib/webhookSignature'
-import { parseCanonicalTestPayload } from '@/lib/api'
+import {
+  DEFAULT_SIGNATURE_TOLERANCE_SECONDS,
+  SIGNATURE_HEADER,
+  parseSignatureTimestamp,
+} from '@/lib/webhookSignature'
+import { TEST_PAYLOAD_MAX_SKEW_MS, parseCanonicalTestPayload } from '@/lib/api'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
 import type { LookupAddress } from 'node:dns'
 import {
@@ -13,8 +17,6 @@ import {
 
 /** Request bodies are small ({ url, body, signature }). */
 const MAX_BODY_BYTES = 4096
-/** Signature computed in the browser over `body` (lib/webhookSignature). */
-const SIGNATURE_FORMAT = /^sha256=[0-9a-f]{64}$/
 const RATE_LIMIT = 10
 const RATE_WINDOW_MS = 60_000
 /**
@@ -24,6 +26,10 @@ const RATE_WINDOW_MS = 60_000
 const TIMEOUT_MS = 10000
 
 const rateLimit = createRateLimiter(RATE_LIMIT, RATE_WINDOW_MS)
+
+const STALE_MESSAGE = `Test payload is more than ${
+  TEST_PAYLOAD_MAX_SKEW_MS / 60_000
+} minutes from server time; check your device clock and retry`
 
 const fail = (status: number, error: string, headers?: HeadersInit) =>
   NextResponse.json({ ok: false, error }, { status, headers })
@@ -59,6 +65,7 @@ function clientIp(req: NextRequest): string {
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now()
+  const now = startTime
 
   if (!isSameOrigin(req))
     return fail(403, 'Cross-origin requests are not allowed')
@@ -94,14 +101,27 @@ export async function POST(req: NextRequest) {
     return fail(400, 'Do not send the signing secret; send a signature')
   if (!url || typeof url !== 'string')
     return fail(400, 'A valid url is required')
-  if (typeof body !== 'string' || !parseCanonicalTestPayload(body)) {
+  // Signature computed in the browser over `body` (lib/webhookSignature).
+  let signedAt: number | null = null
+  if (signature !== undefined) {
+    if (typeof signature !== 'string') return fail(400, 'Invalid signature')
+    signedAt = parseSignatureTimestamp(signature)
+    if (signedAt === null) return fail(400, 'Invalid signature')
+  }
+  if (typeof body !== 'string' || !parseCanonicalTestPayload(body, { now })) {
+    // Distinguish a stale/future payload so the user can check their clock.
+    const stale =
+      typeof body === 'string' &&
+      parseCanonicalTestPayload(body, { now, maxSkewMs: Infinity })
+    if (stale) return fail(400, STALE_MESSAGE)
     return fail(400, 'body must be a test payload built by the dashboard')
   }
+  // Replay protection (#401): the signature's t= must be fresh as well.
   if (
-    signature !== undefined &&
-    (typeof signature !== 'string' || !SIGNATURE_FORMAT.test(signature))
+    signedAt !== null &&
+    Math.abs(now / 1000 - signedAt) > DEFAULT_SIGNATURE_TOLERANCE_SECONDS
   ) {
-    return fail(400, 'Invalid signature')
+    return fail(400, STALE_MESSAGE)
   }
 
   let parsedUrl: URL
