@@ -47,7 +47,7 @@ export function useWalletWatcher(): void {
 }
 
 export interface WalletState {
-  /** Connected public key, or null while disconnected. */
+  /** Connected public key, or null while disconnected. Single source of truth. */
   publicKey: string | null
   /** True once the initial Freighter connection probe has settled. */
   initialized: boolean
@@ -58,9 +58,11 @@ export interface WalletState {
 /**
  * Shared wallet state for every wallet-aware component.
  *
- * On mount it probes the extension once, then follows the `txwatch:wallet`
- * event bus, so connecting or disconnecting from one component updates all of
- * the others without a reload.
+ * This is the single source of truth for the connected wallet public key.
+ * Nothing is persisted to localStorage or window — legacy values left by older
+ * builds are cleared by lib/walletEvents.ts on module load and on every
+ * broadcast. Connecting or disconnecting from one component updates all others
+ * via the `txwatch:wallet` event bus.
  */
 export function useWalletState(): WalletState {
   const [publicKey, setPublicKey] = useState<string | null>(null)
