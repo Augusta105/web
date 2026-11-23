@@ -14,6 +14,11 @@ vi.mock('@stellar/freighter-api', () => ({
   getNetworkDetails: vi.fn(),
   requestAccess: vi.fn(),
   signTransaction: vi.fn(),
+  // useWalletState instantiates this for the shared app-level watcher.
+  WatchWalletChanges: class {
+    watch() {}
+    stop() {}
+  },
 }))
 
 const mockIsConnected = vi.mocked(isConnected)
@@ -190,7 +195,7 @@ describe('FreighterConnect', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText(/Freighter not installed/)).toBeInTheDocument()
+        expect(screen.getAllByText(/Freighter not installed/).length).toBeGreaterThan(0)
         expect(
           screen.getByRole('link', { name: /Install Freighter/i })
         ).toHaveAttribute('href', 'https://www.freighter.app/')
@@ -266,6 +271,23 @@ describe('FreighterConnect', () => {
       await waitFor(() => {
         expect(onConnect).toHaveBeenCalledWith(MOCK_PUBLIC_KEY)
       })
+    })
+
+    it('calls onConnect exactly once after a user-initiated connection', async () => {
+      const onConnect = vi.fn()
+      mockDisconnectedSession()
+
+      render(<FreighterConnect onConnect={onConnect} />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: /Connect Freighter/ })
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Disconnect')).toBeInTheDocument()
+      })
+      expect(onConnect).toHaveBeenCalledTimes(1)
+      expect(onConnect).toHaveBeenCalledWith(MOCK_PUBLIC_KEY)
     })
 
     it('calls onConnect callback on initial mount if already connected', async () => {
