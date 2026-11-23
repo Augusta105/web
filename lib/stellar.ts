@@ -1,7 +1,6 @@
 import { Network } from '@/types'
 import { StrKey } from '@stellar/stellar-sdk'
 import { classifyHost } from '@/lib/ipRanges'
-import { sorobanRpcUrl } from './networkUrls.mjs'
 export {
   HORIZON_URLS,
   SOROBAN_RPC_URLS,
@@ -14,27 +13,6 @@ export {
   explorerTxUrl,
   explorerContractUrl,
 } from './explorer'
-export const STELLAR_EXPERT_BASE = 'https://stellar.expert/explorer'
-
-export function resolveExplorerNetwork(network?: string): string {
-  if (!network) return 'public'
-  const lower = network.toLowerCase()
-  if (lower === 'mainnet') return 'public'
-  return lower
-}
-
-export function explorerTxUrl(network: Network | string, txHash: string): string {
-  const net = resolveExplorerNetwork(network)
-  return `${STELLAR_EXPERT_BASE}/${net}/tx/${txHash}`
-}
-
-export function explorerContractUrl(
-  network: Network | string,
-  contractId: string
-): string {
-  const net = resolveExplorerNetwork(network)
-  return `${STELLAR_EXPERT_BASE}/${net}/contract/${contractId}`
-}
 
 /**
  * Maps Freighter network strings (e.g. PUBLIC, TESTNET, FUTURENET) to the app Network type (#8).
@@ -90,13 +68,17 @@ const CONTRACT_CANDIDATE = /C[A-Z2-7]{55}(?![A-Z2-7])/gi
 function networkFromUrl(url: string): Network | undefined {
   const lower = url.toLowerCase()
   // stellar.expert: /explorer/<public|testnet|futurenet>/
-  const expert = lower.match(/stellar\.expert\/explorer\/(public|testnet|futurenet)\//)
+  const expert = lower.match(
+    /stellar\.expert\/explorer\/(public|testnet|futurenet)\//
+  )
   if (expert) return expert[1] === 'public' ? 'mainnet' : (expert[1] as Network)
   // Stellar Lab: ?$=network$id=<testnet|futurenet|mainnet>
   const lab = lower.match(/network\$id=(testnet|futurenet|mainnet|public)/)
   if (lab) return lab[1] === 'public' ? 'mainnet' : (lab[1] as Network)
   // StellarChain: testnet./futurenet. subdomains; the bare host is mainnet.
-  const chain = lower.match(/(?:^|\/\/)(?:(testnet|futurenet)\.)?(?:www\.)?stellarchain\.io\b/)
+  const chain = lower.match(
+    /(?:^|\/\/)(?:(testnet|futurenet)\.)?(?:www\.)?stellarchain\.io\b/
+  )
   if (chain) return (chain[1] as Network | undefined) ?? 'mainnet'
   // Anything else (e.g. explorers linked from Freighter): look for the name.
   if (/\bfuturenet\b/.test(lower)) return 'futurenet'
