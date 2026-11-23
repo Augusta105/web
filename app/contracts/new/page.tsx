@@ -17,11 +17,12 @@ import {
   describeRule,
   TEST_CONTRACT_ID,
 } from '@/lib/api'
-import WebhookTestButton from '@/components/WebhookTestButton'
 import {
   sendTestWebhook,
   type TestWebhookResult,
 } from '@/lib/api'
+import WebhookTestButton from '@/components/WebhookTestButton'
+import WebhookHeadersField from '@/components/WebhookHeadersField'
 import { generateWebhookSecret } from '@/lib/webhookSignature'
 import { generateId } from '@/lib/id'
 import CopyButton from '@/components/CopyButton'
@@ -54,6 +55,7 @@ export default function NewContractPage() {
   const [network, setNetwork] = useState<Network>('testnet')
   const [webhookUrl, setWebhookUrl] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
+  const [webhookHeaders, setWebhookHeaders] = useState<Record<string, string>>({})
   const [webhookUrlWarning, setWebhookUrlWarning] = useState<string | null>(null)
   const [rules, setRules] = useState<AlertRule[]>([])
   
@@ -386,6 +388,8 @@ export default function NewContractPage() {
       rules,
       webhook_url: webhookUrl.trim(),
       webhook_secret: webhookSecret.trim() || undefined,
+      webhook_headers:
+        Object.keys(webhookHeaders).length > 0 ? webhookHeaders : undefined,
       created_at: Date.now(),
       updated_at: Date.now(),
       enabled: true,
@@ -728,6 +732,13 @@ export default function NewContractPage() {
             </p>
           </div>
 
+          {/* Custom Webhook Headers (#408) */}
+          <WebhookHeadersField
+            idPrefix="new-contract"
+            headers={webhookHeaders}
+            onChange={setWebhookHeaders}
+          />
+
           {/* Rules */}
           <div ref={rulesRef}>
             <span id={rulesId} className="block text-sm font-medium text-zinc-300 mb-1.5">Alert Rules</span>
@@ -802,6 +813,7 @@ export default function NewContractPage() {
             network={network}
             rule={testRule}
             secret={webhookSecret}
+            headers={webhookHeaders}
           />
           {testStatus === 'ok' && <p className="text-xs text-emerald-400">Webhook delivered successfully.</p>}
           {testStatus === 'error' && <p className="text-xs text-red-400">{testError}</p>}
