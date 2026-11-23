@@ -11,8 +11,11 @@ import {
 
 /** Request bodies are small ({ url, body, signature }). */
 const MAX_BODY_BYTES = 4096
-/** Signature computed in the browser over `body` (lib/webhookSignature). */
-const SIGNATURE_FORMAT = /^sha256=[0-9a-f]{64}$/
+/**
+ * Signature computed in the browser over `body` (lib/webhookSignature):
+ * `t=<unix seconds>,v1=<hex HMAC-SHA256>`.
+ */
+const SIGNATURE_FORMAT = /^t=\d+,v1=[0-9a-f]{64}$/
 const RATE_LIMIT = 10
 const RATE_WINDOW_MS = 60_000
 const TIMEOUT_MS = 10000
