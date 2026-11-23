@@ -74,6 +74,7 @@ function load<T>(key: string): T[] {
 
 const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024 
 const MAX_ALERTS_PER_CONTRACT = 500
+export const MAX_RULES_PER_CONTRACT = 20
 const DEFAULT_RETENTION_DAYS = 90
 
 export function getRetentionDays(): number {
@@ -278,6 +279,15 @@ export class DuplicateContractError extends Error {
   }
 }
 
+export class MaxRulesPerContractError extends Error {
+  constructor(contractId: string, count: number, max: number) {
+    super(
+      `Contract ${contractId} has ${count} rules — maximum of ${max} rules per contract is allowed. Remove some rules before adding more.`
+    )
+    this.name = 'MaxRulesPerContractError'
+  }
+}
+
 export function addContract(contract: WatchedContract) {
   if (getContractByIdAndNetwork(contract.contract_id, contract.network)) {
     throw new DuplicateContractError(contract.contract_id, contract.network)
@@ -303,6 +313,10 @@ export function saveContract(contract: WatchedContract): boolean {
   )
   if (duplicate) {
     throw new DuplicateContractError(contract.contract_id, contract.network)
+  }
+
+  if (Array.isArray(contract.rules) && contract.rules.length > MAX_RULES_PER_CONTRACT) {
+    throw new MaxRulesPerContractError(contract.id, contract.rules.length, MAX_RULES_PER_CONTRACT)
   }
 
   const updated = { ...contract, enabled: contract.enabled ?? true, updated_at: Date.now() }

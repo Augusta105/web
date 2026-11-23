@@ -6,6 +6,7 @@ import { formatRuleSummary } from '@/lib/format'
 import { MAX_XLM_DECIMALS, validateThreshold } from '@/lib/formatAmount'
 import { getRuleMeta } from '@/lib/ruleMeta'
 import { isValidFunctionName, sanitizeAdminFunctionNames } from '@/lib/soroban'
+import { MAX_RULES_PER_CONTRACT } from '@/lib/storage'
 import AlertRuleBadge from './AlertRuleBadge'
 
 const RULE_TYPES: AlertRuleType[] = [
@@ -232,6 +233,12 @@ export default function RuleBuilder({
       onRulesChanged?.(updated, 'update')
       setEditingIndex(null)
     } else {
+      if (rules.length >= MAX_RULES_PER_CONTRACT) {
+        setError(
+          `Maximum of ${MAX_RULES_PER_CONTRACT} rules per contract. Remove some rules before adding more.`
+        )
+        return
+      }
       if (isDuplicate(built, rules)) {
         setWarning('This rule already exists')
         return
@@ -253,6 +260,12 @@ export default function RuleBuilder({
     }
     if (!toAdd.length) {
       setWarning('These rules already exist')
+      return
+    }
+    if (rules.length + toAdd.length > MAX_RULES_PER_CONTRACT) {
+      setError(
+        `Maximum of ${MAX_RULES_PER_CONTRACT} rules per contract. This preset would add ${toAdd.length} rule(s), exceeding the limit.`
+      )
       return
     }
     const updated = [...rules, ...toAdd]
