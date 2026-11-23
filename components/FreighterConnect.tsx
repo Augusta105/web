@@ -125,7 +125,8 @@ export default function FreighterConnect({
       const session = await connectFreighter()
       publish(session.publicKey)
       setNetwork(session.network ?? null)
-      onConnect?.(session.publicKey)
+      // onConnect fires from the publicKey effect above; calling it here too
+      // would notify the parent twice for one connection.
     } catch (err) {
       if (err instanceof FreighterUnavailableError) {
         setMissingExtension(true)
