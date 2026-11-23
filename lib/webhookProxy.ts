@@ -152,6 +152,33 @@ export interface DeliveryResult {
   bodySnippet: string | null
 }
 
+/** Longest redirect target echoed back to the dashboard. */
+export const MAX_REDIRECT_TARGET_LENGTH = 2048
+
+/**
+ * The target of a receiver's redirect, reduced to origin and path, for
+ * telling the user where their webhook URL moved (#399). A relative
+ * `Location` is resolved against the URL that was called. Query string,
+ * fragment and credentials are dropped (they may carry tokens), as is any
+ * non-http(s) or over-long target. Returns null when nothing safe is left.
+ */
+export function redirectTarget(
+  location: string | null | undefined,
+  base: URL
+): string | null {
+  const raw = location?.trim()
+  if (!raw) return null
+  let target: URL
+  try {
+    target = new URL(raw, base)
+  } catch {
+    return null
+  }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return null
+  const value = `${target.origin}${target.pathname}`
+  return value.length > MAX_REDIRECT_TARGET_LENGTH ? null : value
+}
+
 export interface DeliverWebhookOptions {
   /**
    * Addresses already vetted by resolvePublicAddresses for `url.hostname`.
