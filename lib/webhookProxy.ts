@@ -279,6 +279,68 @@ export function deliverWebhook(
   })
 }
 
+/** Generic message for a failure that is not one of the known codes. */
+export const GENERIC_DELIVERY_ERROR = 'Failed to deliver webhook'
+
+/** Node network/TLS error codes and the fixed message shown for each. */
+const DELIVERY_ERROR_MESSAGES: Record<string, string> = {
+  ECONNREFUSED: 'The receiver refused the connection',
+  ECONNRESET: 'The receiver closed the connection unexpectedly',
+  EPIPE: 'The receiver closed the connection unexpectedly',
+  ECONNABORTED: 'The receiver closed the connection unexpectedly',
+  ENOTFOUND: 'Could not resolve the webhook host',
+  EAI_AGAIN: 'Could not resolve the webhook host',
+  EAI_NONAME: 'Could not resolve the webhook host',
+  EHOSTUNREACH: 'The receiver is unreachable',
+  ENETUNREACH: 'The receiver is unreachable',
+  ETIMEDOUT: 'Connecting to the receiver timed out',
+  HPE_INVALID_CONSTANT: 'The receiver sent an invalid HTTP response',
+  HPE_INVALID_STATUS: 'The receiver sent an invalid HTTP response',
+  HPE_HEADER_OVERFLOW: 'The receiver sent an invalid HTTP response',
+}
+
+const TLS_ERROR_MESSAGE = "The receiver's TLS certificate could not be verified"
+
+/** OpenSSL/Node codes that mean the receiver's certificate was rejected. */
+const TLS_ERROR_CODES = new Set([
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+])
+
+export interface DescribedDeliveryError {
+  /** Fixed, user-safe message; never contains addresses or internals. */
+  message: string
+  /** The error's code, if any, for server-side logs only. */
+  code: string | null
+}
+
+/**
+ * Maps a failed delivery to a fixed user-facing message (#402). Node error
+ * messages such as `connect ECONNREFUSED 203.0.113.5:443` reveal resolved
+ * addresses and server internals, so only the code is inspected and the
+ * message itself is never returned to the caller.
+ */
+export function describeDeliveryError(error: unknown): DescribedDeliveryError {
+  const raw = (error as { code?: unknown } | null | undefined)?.code
+  const code = typeof raw === 'string' && raw ? raw : null
+  if (!code) return { message: GENERIC_DELIVERY_ERROR, code }
+  const known = DELIVERY_ERROR_MESSAGES[code]
+  if (known) return { message: known, code }
+  if (
+    code.startsWith('CERT_') ||
+    code.startsWith('ERR_TLS_') ||
+    code.startsWith('ERR_SSL_') ||
+    TLS_ERROR_CODES.has(code)
+  ) {
+    return { message: TLS_ERROR_MESSAGE, code }
+  }
+  return { message: GENERIC_DELIVERY_ERROR, code }
+}
+
 /**
  * Fixed-window per-key rate limiter (in memory, per server instance).
  */
