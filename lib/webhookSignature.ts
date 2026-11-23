@@ -24,6 +24,9 @@ const fromHex = (hex: string): Uint8Array | null => {
   return out
 }
 
+/** A v1 MAC is an HMAC-SHA256 digest: 32 bytes, 64 hex characters. */
+const SIGNATURE_MAC_HEX = /^[0-9a-f]{64}$/i
+
 const enc = new TextEncoder()
 
 function hmacKey(secret: string, usage: 'sign' | 'verify'): Promise<CryptoKey> {
@@ -57,6 +60,38 @@ export async function signWebhookPayload(
   return `t=${t},v1=${toHex(mac)}`
 }
 
+/** A parsed X-TxWatch-Signature header; `signatures` holds every v1 MAC. */
+export interface ParsedSignatureHeader {
+  timestamp: number
+  signatures: Uint8Array[]
+}
+
+/**
+ * Parses a `t=<unix>,v1=<hex>[,v1=<hex>...]` header. Returns null when the
+ * timestamp is missing or not digits, or when no v1 entry is a 32-byte hex MAC.
+ * Shared by the receiver-side verifier and the test-webhook proxy, so both
+ * agree on what a well-formed signature looks like.
+ */
+export function parseSignatureHeader(
+  header: string | null | undefined
+): ParsedSignatureHeader | null {
+  let timestamp: number | null = null
+  const signatures: Uint8Array[] = []
+  for (const part of (header ?? '').split(',')) {
+    const eq = part.indexOf('=')
+    if (eq < 0) continue
+    const name = part.slice(0, eq).trim()
+    const value = part.slice(eq + 1).trim()
+    if (name === 't' && /^\d+$/.test(value)) timestamp = Number(value)
+    else if (name === 'v1' && SIGNATURE_MAC_HEX.test(value)) {
+      const bytes = fromHex(value)
+      if (bytes) signatures.push(bytes)
+    }
+  }
+  if (timestamp === null || signatures.length === 0) return null
+  return { timestamp, signatures }
+}
+
 export type SignatureVerification =
   | { valid: true; timestamp: number }
   | { valid: false; reason: 'malformed' | 'stale' | 'mismatch' }
@@ -83,22 +118,9 @@ export async function verifyWebhookSignature(
     now = Math.floor(Date.now() / 1000),
   }: VerifyWebhookSignatureOptions = {}
 ): Promise<SignatureVerification> {
-  let timestamp: number | null = null
-  const signatures: Uint8Array[] = []
-  for (const part of (header ?? '').split(',')) {
-    const eq = part.indexOf('=')
-    if (eq < 0) continue
-    const name = part.slice(0, eq).trim()
-    const value = part.slice(eq + 1).trim()
-    if (name === 't' && /^\d+$/.test(value)) timestamp = Number(value)
-    else if (name === 'v1') {
-      const bytes = fromHex(value)
-      if (bytes) signatures.push(bytes)
-    }
-  }
-  if (timestamp === null || signatures.length === 0) {
-    return { valid: false, reason: 'malformed' }
-  }
+  const parsed = parseSignatureHeader(header)
+  if (!parsed) return { valid: false, reason: 'malformed' }
+  const { timestamp, signatures } = parsed
   if (Math.abs(now - timestamp) > toleranceSeconds) {
     return { valid: false, reason: 'stale' }
   }
