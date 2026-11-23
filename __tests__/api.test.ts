@@ -190,7 +190,50 @@ describe('sendTestWebhook', () => {
         is_test: true,
       })
       // The receiver's status comes from the proxy's JSON, not its HTTP code.
-      expect(result).toEqual({ status: 204, ok: true })
+      expect(result).toMatchObject({ status: 204, ok: true })
+      expect(result).not.toHaveProperty('location')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('passes the redirect target reported by the proxy through', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    try {
+      ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 301,
+          ok: false,
+          location: 'https://example.com/hook/',
+        }),
+      })
+      const result = await sendTestWebhook('https://example.com/hook', {
+        contractId: 'CBCDEF',
+      })
+      expect(result).toMatchObject({
+        status: 301,
+        ok: false,
+        location: 'https://example.com/hook/',
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('ignores a non-string location from the proxy', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    try {
+      ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 302, ok: false, location: 42 }),
+      })
+      const result = await sendTestWebhook('https://example.com/hook', {
+        contractId: 'CBCDEF',
+      })
+      expect(result).not.toHaveProperty('location')
     } finally {
       vi.unstubAllEnvs()
     }
