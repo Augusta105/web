@@ -11,6 +11,7 @@ import {
   BlockedAddressError,
   createRateLimiter,
   deliverWebhook,
+  describeDeliveryError,
   redirectTarget,
   resolvePublicAddresses,
 } from '@/lib/webhookProxy'
@@ -191,14 +192,20 @@ export async function POST(req: NextRequest) {
     }
     const err = error as { name?: string; message?: string } | undefined
     if (err?.name === 'TimeoutError') return timedOut(durationMs)
+    // Never echo the raw error: Node messages carry resolved addresses and
+    // TLS internals (#402). Details go to the server log only, and never the
+    // request body or signature.
+    const { message, code } = describeDeliveryError(error)
+    console.warn('[test-webhook] delivery failed', {
+      host: parsedUrl.hostname,
+      code,
+      name: err?.name,
+      detail: err?.message,
+      durationMs,
+    })
     return NextResponse.json(
-      {
-        status: 500,
-        ok: false,
-        durationMs,
-        error: err?.message || 'Failed to deliver webhook',
-      },
-      { status: 500 }
+      { status: 502, ok: false, durationMs, error: message },
+      { status: 502 }
     )
   }
 }
