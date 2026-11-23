@@ -143,6 +143,14 @@ export default function FreighterConnect({
   function disconnect() {
     publish(null)
     setNetwork(null)
+    // Clear the window global too, so nothing reading it still sees the old
+    // public key after disconnecting. Guarded: the property may not be
+    // configurable in every environment.
+    try {
+      delete (window as { __freighterPublicKey?: string }).__freighterPublicKey
+    } catch {
+      // Ignore non-configurable property errors
+    }
     onDisconnect?.()
   }
 

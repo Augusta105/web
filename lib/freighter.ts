@@ -12,6 +12,16 @@
  *    reported as "extension unavailable".
  * 2. Errors are returned as an `error` field on the resolved value rather than
  *    thrown, so they are converted into thrown errors here.
+ *
+ * Security note (issue #521): connecting trusts whatever the wallet reports.
+ * `requestAccess()` / `getAddress()` return a public key, and that key is
+ * treated as proof that the user controls the wallet — there is no
+ * signed-challenge step, so the app never cryptographically verifies ownership.
+ * For a monitoring tool with no fund custody this is acceptable. If any future
+ * feature ties permissions (e.g. who may edit a contract's rules) to wallet
+ * identity, it MUST implement a signed-challenge auth flow (server-issued
+ * nonce, signed via `signWithFreighter`, verified before granting access)
+ * rather than relying on the public key alone.
  */
 
 import {
@@ -102,6 +112,13 @@ export class FreighterTimeoutError extends Error {
   }
 }
 
+/**
+ * Result of a connect flow.
+ *
+ * TODO(#521): `publicKey` is unverified — it is whatever the wallet reported,
+ * not proof of ownership. See the module security note before using it for
+ * authorisation.
+ */
 export interface FreighterSession {
   publicKey: string
   /** Freighter network id, e.g. `"TESTNET"`. */
@@ -254,7 +271,14 @@ export async function readFreighterConnection(): Promise<{
   }
 }
 
-/** Explicit connect flow — prompts the user to approve this site. */
+/**
+ * Explicit connect flow — prompts the user to approve this site.
+ *
+ * TODO(#521): this only proves the wallet is reachable and approved for this
+ * site; it does not verify ownership of the returned public key (no
+ * signed-challenge step). Do not gate permissions on `publicKey` until a
+ * signed-challenge auth flow is implemented — see the module security note.
+ */
 export async function connectFreighter(): Promise<FreighterSession> {
   if (!(await isExtensionAvailable())) {
     throw new FreighterUnavailableError()
