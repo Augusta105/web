@@ -72,7 +72,7 @@ function load<T>(key: string): T[] {
   return valid as T[]
 }
 
-const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024 
+const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024
 const MAX_ALERTS_PER_CONTRACT = 500
 const DEFAULT_RETENTION_DAYS = 90
 
@@ -106,7 +106,7 @@ function getStorageSize(): number {
     if (!key) continue
     const value = storage.getItem(key)
     if (value !== null) {
-      size += (value.length + key.length) * 2 
+      size += (value.length + key.length) * 2
     }
   }
   return size
@@ -299,13 +299,15 @@ export function saveContract(contract: WatchedContract): boolean {
   }
 
   const duplicate = contracts.find(
-    (c) => c.contract_id === contract.contract_id && c.network === contract.network && c.id !== contract.id
+    (c) =>
+      c.contract_id === contract.contract_id &&
+      c.network === contract.network &&
+      c.id !== contract.id
   )
   if (duplicate) {
     throw new DuplicateContractError(contract.contract_id, contract.network)
   }
 
-  const updated = { ...contract, enabled: contract.enabled ?? true, updated_at: Date.now() }
   const index = contracts.findIndex((c) => c.id === contract.id)
   if (index === -1) {
     return save(CONTRACTS_KEY, [...contracts, updated])
@@ -336,7 +338,12 @@ function deleteAlerts(contractId: string) {
 
 export function deleteAlertsByNetwork(contractId: string, network: string) {
   const alerts = load<AlertPayload>(ALERTS_KEY)
-  save(ALERTS_KEY, alerts.filter((a) => !(a.contract_id === contractId && a.network === network)))
+  save(
+    ALERTS_KEY,
+    alerts.filter(
+      (a) => !(a.contract_id === contractId && a.network === network)
+    )
+  )
 }
 
 // Persists a full alert list (used by the import flow to restore a backup).
@@ -347,7 +354,10 @@ export function replaceAlerts(alerts: AlertPayload[]): boolean {
 
 // Rewrites `contract_id` on every alert matching `oldContractId` so alert history
 // survives when an imported contract is re-keyed under a new id.
-export function rekeyAlerts(oldContractId: string, newContractId: string): boolean {
+export function rekeyAlerts(
+  oldContractId: string,
+  newContractId: string
+): boolean {
   if (oldContractId === newContractId) return true
   const alerts = load<AlertPayload>(ALERTS_KEY)
   let changed = false
@@ -369,12 +379,16 @@ export function deleteAlert(alertId: string) {
 }
 
 export function getAllAlerts(): AlertPayload[] {
-  return load<AlertPayload>(ALERTS_KEY).sort((a, b) => b.timestamp - a.timestamp)
+  return load<AlertPayload>(ALERTS_KEY).sort(
+    (a, b) => b.timestamp - a.timestamp
+  )
 }
 
 export function getAlerts(contractId?: string): AlertPayload[] {
   const all = load<AlertPayload>(ALERTS_KEY)
-  const filtered = contractId ? all.filter((a) => a.contract_id === contractId) : all
+  const filtered = contractId
+    ? all.filter((a) => a.contract_id === contractId)
+    : all
   return filtered.sort((a, b) => b.timestamp - a.timestamp)
 }
 
@@ -517,5 +531,6 @@ export function getTodayAlertCount(): number {
   const midnight = new Date()
   midnight.setHours(0, 0, 0, 0)
   const startOfDay = midnight.getTime()
-  return load<AlertPayload>(ALERTS_KEY).filter((a) => a.timestamp >= startOfDay).length
+  return load<AlertPayload>(ALERTS_KEY).filter((a) => a.timestamp >= startOfDay)
+    .length
 }
