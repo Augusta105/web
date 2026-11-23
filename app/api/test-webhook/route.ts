@@ -7,6 +7,7 @@ import {
   BlockedAddressError,
   createRateLimiter,
   deliverWebhook,
+  redirectTarget,
   resolvePublicAddresses,
 } from '@/lib/webhookProxy'
 
@@ -152,11 +153,16 @@ export async function POST(req: NextRequest) {
       { addresses, signal: deadline }
     )
     const durationMs = Date.now() - startTime
+    // Redirects are never followed; report where the receiver points so the
+    // user can update the URL (#399). Origin and path only.
+    const isRedirect = res.status >= 300 && res.status < 400
+    const location = isRedirect ? redirectTarget(res.location, parsedUrl) : null
     return NextResponse.json({
       status: res.status,
       ok: res.status >= 200 && res.status < 300,
       durationMs,
       bodySnippet: res.bodySnippet,
+      ...(location ? { location } : {}),
     })
   } catch (error) {
     const durationMs = Date.now() - startTime
