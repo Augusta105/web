@@ -17,6 +17,20 @@ const ALERT_RULE_TYPES: readonly AlertRuleType[] = [
   'TransactionFailed',
 ]
 
+/** Outcome of a webhook delivery, as reported by the core when it is known. */
+export const DELIVERY_STATUSES = ['success', 'failed', 'pending'] as const
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number]
+
+/** Parses an untrusted delivery status. Unknown or missing values yield undefined. */
+export function parseDeliveryStatus(
+  value: unknown
+): DeliveryStatus | undefined {
+  return typeof value === 'string' &&
+    (DELIVERY_STATUSES as readonly string[]).includes(value)
+    ? (value as DeliveryStatus)
+    : undefined
+}
+
 export function isAlertRuleType(value: unknown): value is AlertRuleType {
   return (
     typeof value === 'string' &&
@@ -119,4 +133,7 @@ export interface AlertPayload {
   /** Set on simulated (test) deliveries so receivers can tell them from real
    *  alerts. Mirrored by the `is_test` field of tx-watch-core's payload. */
   is_test?: boolean
+  /** Delivery outcome. Assumed core field, see docs/MOCK_API_STRATEGY.md.
+   *  Absent means unknown: never treat a missing value as a success. */
+  delivery_status?: DeliveryStatus
 }

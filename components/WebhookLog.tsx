@@ -1,6 +1,12 @@
 'use client'
 
-import { AlertPayload, AlertRuleType, Network, isAlertRuleType } from '@/types'
+import {
+  AlertPayload,
+  AlertRuleType,
+  Network,
+  isAlertRuleType,
+  parseDeliveryStatus,
+} from '@/types'
 import { explorerTxUrl, truncateId } from '@/lib/stellar'
 import EmptyState from './EmptyState'
 import CopyButton from '@/components/CopyButton'
@@ -58,7 +64,7 @@ export function toWebhookEntry(alert: AlertPayload): WebhookEntry {
     timestamp: new Date(alert.timestamp).toISOString(),
     event: alert.rule_triggered,
     contractAddress: alert.contract_id,
-    status: 'success',
+    status: parseDeliveryStatus(alert.delivery_status),
     amount: alert.amount?.toString(),
     txHash: alert.transaction_hash,
     payload: alert,

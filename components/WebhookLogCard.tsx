@@ -5,16 +5,21 @@ import { formatAmount } from '@/lib/formatAmount'
 import { truncateId } from '@/lib/stellar'
 import { formatDateTime } from '@/lib/format'
 import { explorerContractUrl, explorerTxUrl } from '@/lib/explorer'
-import { truncateId } from '@/lib/stellar'
 import Modal from '@/components/Modal'
-import { AlertPayload, Network } from '@/types'
+import {
+  AlertPayload,
+  DeliveryStatus,
+  Network,
+  parseDeliveryStatus,
+} from '@/types'
 
 export interface WebhookEntry {
   id: string
   timestamp: string
   event: string
   contractAddress?: string
-  status: 'success' | 'failed' | 'pending'
+  /** Delivery outcome. Absent when the source does not report one. */
+  status?: DeliveryStatus
   amount?: string
   asset?: string
   txHash?: string
@@ -28,7 +33,7 @@ export interface WebhookLogCardProps {
   onClick?: () => void
 }
 
-const STATUS_STYLES: Record<WebhookEntry['status'], string> = {
+const STATUS_STYLES: Record<DeliveryStatus, string> = {
   success:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
@@ -45,7 +50,7 @@ function normalizeEntry(props: WebhookLogCardProps): WebhookEntry {
       timestamp: new Date(a.timestamp).toISOString(),
       event: a.rule_triggered,
       contractAddress: a.contract_id,
-      status: 'success',
+      status: parseDeliveryStatus(a.delivery_status),
       amount: a.amount !== undefined ? String(a.amount) : undefined,
       asset: 'XLM',
       txHash: a.transaction_hash,
@@ -56,7 +61,6 @@ function normalizeEntry(props: WebhookLogCardProps): WebhookEntry {
     id: '',
     timestamp: new Date().toISOString(),
     event: 'Unknown',
-    status: 'success',
   }
 }
 
@@ -125,11 +129,13 @@ export function WebhookLogCard({
           <span className="font-medium text-sm text-foreground break-all">
             {data.event}
           </span>
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[data.status]}`}
-          >
-            {data.status}
-          </span>
+          {data.status && (
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[data.status]}`}
+            >
+              {data.status}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
