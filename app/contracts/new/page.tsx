@@ -28,6 +28,7 @@ import ContractVerification, { type CheckState } from '@/components/ContractVeri
 import { useFreighterConnection } from '@/lib/useFreighterConnection'
 import { useNetworkMismatchWarning } from '@/lib/useNetworkMismatchWarning'
 import RuleBuilder from '@/components/RuleBuilder'
+import FieldMessage from '@/components/FieldMessage'
 import FreighterConnect from '@/components/FreighterConnect'
 import { useToast } from '@/components/ToastProvider'
 
@@ -540,8 +541,8 @@ export default function NewContractPage() {
             />
             <div className="flex justify-between items-start mt-1">
               <div>
-                {errors.label && <p id={labelErrorId} className="text-xs text-red-400">{errors.label}</p>}
-                {labelWarning && !errors.label && <p className="text-xs text-amber-400">{labelWarning}</p>}
+                {errors.label && <FieldMessage kind="error" id={labelErrorId}>{errors.label}</FieldMessage>}
+                {labelWarning && !errors.label && <FieldMessage kind="warning">{labelWarning}</FieldMessage>}
               </div>
               <p className="text-xs text-zinc-500">{label.length}/100</p>
             </div>
@@ -570,15 +571,15 @@ export default function NewContractPage() {
               className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition-colors font-mono"
             />
             {addressHint && !errors.contract_id ? (
-              <p id={contractIdHintId} className="text-xs text-amber-400 mt-1" data-testid="contract-id-address-hint">
+              <FieldMessage kind="warning" id={contractIdHintId}  data-testid="contract-id-address-hint" className="mt-1">
                 {addressHint}
-              </p>
+              </FieldMessage>
             ) : (
               <p id={contractIdHintId} className="text-xs text-zinc-500 mt-1">
                 Starts with C, 56 characters.
               </p>
             )}
-            {errors.contract_id && <p id={contractIdErrorId} className="text-xs text-red-400 mt-1">{errors.contract_id}</p>}
+            {errors.contract_id && <FieldMessage kind="error" id={contractIdErrorId} className="mt-1">{errors.contract_id}</FieldMessage>}
             <ContractVerification
               network={network}
               contractId={contractId}
@@ -593,9 +594,9 @@ export default function NewContractPage() {
               onOverrideChange={setVerificationOverridden}
             />
             {verificationStatus === 'not_found' && !verificationOverridden && (
-              <p className="text-xs text-amber-400 mt-1" data-testid="verification-blocking">
+              <FieldMessage kind="warning" data-testid="verification-blocking" className="mt-1">
                 {verificationReason || `Contract not found on ${network}`}. Tick the override above to save anyway.
-              </p>
+              </FieldMessage>
             )}
           </div>
 
@@ -619,7 +620,7 @@ export default function NewContractPage() {
               <option value="mainnet">Mainnet</option>
               <option value="futurenet">Futurenet</option>
             </select>
-            {networkWarning && <p className="text-xs text-amber-400 mt-1">{networkWarning}</p>}
+            {networkWarning && <FieldMessage kind="warning" className="mt-1">{networkWarning}</FieldMessage>}
             {hasNetworkMismatch && (
               <div className="mt-2 flex items-center gap-2">
                 <input
@@ -639,7 +640,7 @@ export default function NewContractPage() {
                 </label>
               </div>
             )}
-            {errors.network && <p id={networkErrorId} className="text-xs text-red-400 mt-1">{errors.network}</p>}
+            {errors.network && <FieldMessage kind="error" id={networkErrorId} className="mt-1">{errors.network}</FieldMessage>}
           </div>
 
           {/* Webhook URL */}
@@ -673,7 +674,7 @@ export default function NewContractPage() {
             <p id={webhookUrlHintId} className="text-xs text-zinc-500 mt-1">
               Must be an https:// URL; credentials and private addresses are rejected.
             </p>
-            {errors.webhook_url && <p id={webhookUrlErrorId} className="text-xs text-red-400 mt-1">{errors.webhook_url}</p>}
+            {errors.webhook_url && <FieldMessage kind="error" id={webhookUrlErrorId} className="mt-1">{errors.webhook_url}</FieldMessage>}
             {webhookUrlWarning && !errors.webhook_url && (
               <div className="mt-1 flex items-start justify-between gap-2 text-xs text-amber-400">
                 <p>{webhookUrlWarning}</p>
@@ -731,7 +732,7 @@ export default function NewContractPage() {
           <div ref={rulesRef}>
             <span id={rulesId} className="block text-sm font-medium text-zinc-300 mb-1.5">Alert Rules</span>
             <RuleBuilder rules={rules} onChange={setRules} />
-            {errors.rules && <p id={rulesErrorId} className="text-xs text-red-400 mt-1">{errors.rules}</p>}
+            {errors.rules && <FieldMessage kind="error" id={rulesErrorId} className="mt-1">{errors.rules}</FieldMessage>}
           </div>
 
           {/* Test Payload Rule Selection and Preview (#24) */}
@@ -774,7 +775,7 @@ export default function NewContractPage() {
           {!isConnected && (
             <div>
               <FreighterConnect onConnect={handleWalletConnect} onDisconnect={handleWalletDisconnect} />
-              {errors.wallet && <p id={walletErrorId} className="text-xs text-red-400 mt-1">{errors.wallet}</p>}
+              {errors.wallet && <FieldMessage kind="error" id={walletErrorId} className="mt-1">{errors.wallet}</FieldMessage>}
             </div>
           )}
 
@@ -803,7 +804,7 @@ export default function NewContractPage() {
             secret={webhookSecret}
           />
           {testStatus === 'ok' && <p className="text-xs text-emerald-400">Webhook delivered successfully.</p>}
-          {testStatus === 'error' && <p className="text-xs text-red-400">{testError}</p>}
+          {testStatus === 'error' && <FieldMessage kind="error">{testError}</FieldMessage>}
           {(testStatus === 'ok' || testStatus === 'error') && (
             <div className="space-y-1" data-testid="test-webhook-result">
               {testStatus === 'ok' ? (
@@ -812,10 +813,10 @@ export default function NewContractPage() {
                   {testResult?.durationMs !== undefined && ` in ${testResult.durationMs} ms`}.
                 </p>
               ) : (
-                <p className="text-xs text-red-400">
+                <FieldMessage kind="error">
                   {testError}
                   {testResult?.durationMs !== undefined && ` (${testResult.durationMs} ms)`}
-                </p>
+                </FieldMessage>
               )}
               {testResult?.bodySnippet && (
                 <details className="text-xs text-zinc-400">
