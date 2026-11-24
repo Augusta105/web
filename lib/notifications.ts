@@ -90,7 +90,7 @@ function flushQueuedAlerts(contractPath: string): void {
 
   const queued = state.queuedAlerts
   state.queuedAlerts = []
-  state.lastNotifiedAt += NOTIFY_THROTTLE_MS
+  state.lastNotifiedAt = Date.now()
   showNotification(queued, state.contractLabel, state.contractPath)
 }
 
