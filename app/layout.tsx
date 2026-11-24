@@ -19,6 +19,13 @@ export const metadata: Metadata = {
     template: '%s — TxWatch',
   },
   description: 'Real-time monitoring and alerts for Soroban smart contracts',
+  openGraph: {
+    type: 'website',
+    siteName: 'TxWatch',
+    title: 'TxWatch — Soroban Contract Monitoring',
+    description: 'Real-time monitoring and alerts for Soroban smart contracts',
+  },
+  robots: { index: true, follow: true },
 }
 
 export const viewport: Viewport = {
