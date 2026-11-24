@@ -199,6 +199,8 @@ export default function ContractImportExport() {
           <p>
             {parsed.contracts.length} valid, {parsed.errors.length} invalid,{' '}
             {plan.duplicates.length} duplicate.
+            {parsed.alerts !== undefined &&
+              ` ${parsed.alerts.length} alert(s) to restore, ${parsed.skippedAlerts ?? 0} skipped.`}
           </p>
           {plan.toSave.length > 0 && (
             <div>
