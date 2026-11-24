@@ -3,6 +3,7 @@
 import ContractImportExport from '@/components/ContractImportExport'
 import RetentionSetting from '@/components/RetentionSetting'
 import ApiKeySetting from '@/components/ApiKeySetting'
+import NotificationToggle from '@/components/NotificationToggle'
 import { exportAllStorageData, clearTxWatchStorage } from '@/lib/storageKeys'
 
 export default function SettingsPage() {
@@ -25,6 +26,10 @@ export default function SettingsPage() {
       <ContractImportExport />
       <RetentionSetting />
       <ApiKeySetting />
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Notifications</h2>
+        <NotificationToggle />
+      </section>
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Data Management</h2>
         <div className="flex flex-wrap gap-3">
