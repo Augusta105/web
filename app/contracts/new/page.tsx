@@ -76,6 +76,7 @@ export default function NewContractPage() {
   // Draft Restoration State
   const [draftExists, setDraftExists] = useState(false)
   const DRAFT_KEY = 'txwatch_new_contract_draft'
+  const DRAFT_NETWORKS: string[] = ['mainnet', 'testnet', 'futurenet']
 
   // Warns on mount, on network change, and after connecting, not only when the
   // network <select> changes.
@@ -127,12 +128,22 @@ export default function NewContractPage() {
   function restoreDraft() {
     try {
       const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY)!)
-      setLabel(draft.label || '')
-      setContractId(draft.contract_id || '')
-      setNetwork(draft.network || 'testnet')
-      setWebhookUrl(draft.webhook_url || '')
-      setRules(draft.rules || [])
-    } catch {}
+      if (typeof draft !== 'object' || draft === null) throw new Error('invalid draft')
+      const draftNetwork = draft.network ?? 'testnet'
+      if (!DRAFT_NETWORKS.includes(draftNetwork)) throw new Error('invalid network')
+      const rawRules: unknown = draft.rules ?? []
+      if (!Array.isArray(rawRules)) throw new Error('invalid rules')
+      const parsedRules = rawRules.map(parseAlertRule)
+      if (parsedRules.some((r) => r === null)) throw new Error('invalid rule')
+      setLabel(typeof draft.label === 'string' ? draft.label : '')
+      setContractId(typeof draft.contract_id === 'string' ? draft.contract_id : '')
+      setNetwork(draftNetwork)
+      setWebhookUrl(typeof draft.webhook_url === 'string' ? draft.webhook_url : '')
+      setRules(parsedRules as AlertRule[])
+    } catch {
+      sessionStorage.removeItem(DRAFT_KEY)
+      setPrefillNotice('The saved draft was out of date or invalid and has been discarded.')
+    }
     setDraftExists(false)
   }
 
