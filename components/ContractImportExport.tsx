@@ -55,8 +55,8 @@ export default function ContractImportExport() {
     a.href = url
     a.download =
       exportMode === 'everything'
-        ? 'txwatch-backup.json'
-        : 'txwatch-contracts.json'
+        ? `txwatch-backup-${new Date().toISOString().slice(0, 10)}.json`
+        : `txwatch-contracts-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 0)
   }
@@ -82,8 +82,10 @@ export default function ContractImportExport() {
     }
   }
 
+  const existingContracts = parsed ? getContracts() : []
+  const existingById = new Map(existingContracts.map((x) => [x.id, x]))
   const plan = parsed
-    ? planImport(getContracts(), parsed.contracts, mode, dupes)
+    ? planImport(existingContracts, parsed.contracts, mode, dupes)
     : null
 
   async function handleApply() {
@@ -219,7 +221,7 @@ export default function ContractImportExport() {
               <p className="text-zinc-400">To delete:</p>
               <ul className="list-disc pl-5 text-red-400">
                 {plan.toDeleteIds.map((id) => {
-                  const c = getContracts().find((x) => x.id === id)
+                  const c = existingById.get(id)
                   return (
                     <li key={id}>
                       {c ? `${c.contract_id} (${c.network})` : id}
