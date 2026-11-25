@@ -1,4 +1,4 @@
-import { apiFetch, isApiConfigured, type ApiError } from '@/lib/api'
+import { apiFetch, type ApiError } from '@/lib/api'
 import { addAlert, getAlerts, getAllAlerts } from '@/lib/storage'
 import { isAlertRuleType, type AlertPayload, type Network } from '@/types'
 import type { AlertEnvelope } from '@/lib/api-types'
@@ -30,7 +30,9 @@ export async function fetchAlerts(
   if (since !== undefined) qs.set('since', String(since))
   const body = await apiFetch<unknown>(`/alerts?${qs.toString()}`, { signal })
   if (!body) return []
-  const list = Array.isArray(body) ? body : (body as AlertEnvelope).alerts ?? []
+  const list = Array.isArray(body)
+    ? body
+    : ((body as AlertEnvelope).alerts ?? [])
   if (!Array.isArray(list))
     throw new Error('Invalid alerts response: expected an array of alerts')
   return list.map((entry, index) => {
@@ -73,11 +75,6 @@ export function validateAlertPayload(entry: unknown): AlertPayload | string {
   if (a.is_test !== undefined && typeof a.is_test !== 'boolean')
     return 'is_test must be a boolean'
   return entry as AlertPayload
-  const body = await apiFetch<
-    AlertPayload[] | { alerts: AlertPayload[] } | undefined
-  >(`/alerts?${qs.toString()}`, { signal })
-  if (!body) return []
-  return Array.isArray(body) ? body : body.alerts ?? []
 }
 
 /**
