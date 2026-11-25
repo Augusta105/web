@@ -5,6 +5,7 @@ import { AlertRule, AlertRuleType, isRuleEnabled } from '@/types'
 import { formatRuleSummary } from '@/lib/format'
 import { MAX_XLM_DECIMALS, validateThreshold } from '@/lib/formatAmount'
 import { getRuleMeta } from '@/lib/ruleMeta'
+import { findOverlappingRule } from '@/lib/ruleOverlap'
 import { isValidFunctionName, sanitizeAdminFunctionNames } from '@/lib/soroban'
 import AlertRuleBadge from './AlertRuleBadge'
 
@@ -216,6 +217,7 @@ export default function RuleBuilder({
         functionNamesInputRef.current?.focus()
       return
     }
+    const overlap = findOverlappingRule(built, rules, editingIndex)
     if (editingIndex !== null) {
       if (isDuplicate(built, rules, editingIndex)) {
         setWarning('This rule already exists')
@@ -241,6 +243,12 @@ export default function RuleBuilder({
       onRulesChanged?.(updated, 'add')
     }
     resetDraft()
+    // Non-blocking: the rule is saved, but tell the user it overlaps another (#446)
+    if (overlap) {
+      setWarning(
+        `Added, but this overlaps with existing rule "${[getRuleMeta(overlap.type).label, formatRuleSummary(overlap)].filter(Boolean).join(': ')}" - the same transaction may trigger both alerts`
+      )
+    }
   }
 
   function applyPreset(presetRules: AlertRule[]) {
