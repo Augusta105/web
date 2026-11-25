@@ -48,6 +48,10 @@ These values are scoped to a browser tab session, are not part of the versioned 
 - Storage size is estimated by summing key and value string lengths at two bytes per UTF-16 code unit. When the estimate exceeds 90% of the 5 MiB target (about 4.5 MiB), alert writes are reduced to the latest 30 days; a non-alert write also triggers a best-effort trim of existing alerts to 30 days.
 - If a write throws a recognized quota error, the storage layer prunes using the configured retention period and retries that write once. Other storage failures return/fall through as best-effort failures. The browser's actual quota varies, so these are safeguards, not a guaranteed allocation.
 
+## Change notifications
+
+The browser `storage` event only fires in _other_ tabs, never in the tab that made the write. To keep same-tab UI (for example the dashboard counts after adding a contract) live, every write that goes through `save()` in `lib/storage.ts` also dispatches a `txwatch:storage` `CustomEvent` on `window` with `detail.key` set to the storage key that changed. `onAlertsChange` and `onContractsChange` subscribe to both the custom event (same tab) and the native `storage` event (other tabs), so consumers only need one subscription. Writes that bypass `save()` (for example `pruneOldAlerts`) do not notify.
+
 ## Migrations
 
 `CURRENT_STORAGE_VERSION` is defined in `lib/storage.ts`. Migrations are registered in `lib/migrations.ts` by the version they upgrade **to**, and `components/StorageBootstrap.tsx` runs them at startup. Version `0` is unversioned legacy data; v1 is the compatible baseline, and v2 backfills `enabled: true` on contracts.

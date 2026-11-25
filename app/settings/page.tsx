@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import ContractImportExport from '@/components/ContractImportExport'
 import RetentionSetting from '@/components/RetentionSetting'
 import ApiKeySetting from '@/components/ApiKeySetting'
+import NotificationToggle from '@/components/NotificationToggle'
 import { exportAllStorageData, clearTxWatchStorage } from '@/lib/storageKeys'
 import {
   getWebhookSecretPreviousExpiry,
@@ -66,6 +67,8 @@ export default function SettingsPage() {
             valid for a 24-hour grace period so receivers can be redeployed.
           </p>
         )}
+        <h2 className="text-lg font-semibold">Notifications</h2>
+        <NotificationToggle />
       </section>
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Data Management</h2>
