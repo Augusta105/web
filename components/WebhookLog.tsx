@@ -6,7 +6,7 @@ import EmptyState from './EmptyState'
 import CopyButton from '@/components/CopyButton'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { formatAmount } from '@/lib/formatAmount'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import AlertRuleBadge from './AlertRuleBadge'
 import Modal from './Modal'
@@ -177,7 +177,13 @@ export default function WebhookLog({ alerts, network }: WebhookLogProps) {
   const pageStart = Math.max(0, currentPage * pageSize)
   const pageAlerts = sortedEntries.slice(pageStart, pageStart + pageSize)
 
+  // Skip the reset on mount so ?page= deep links are honored (#449)
+  const didMountRef = useRef(false)
   useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
     setPage(0)
   }, [selectedFilter, debouncedSearch, range, customFrom, customTo, pageSize, sortDirection])
 

@@ -31,11 +31,28 @@ interface AlertRuleBase {
 
 /** Mirrors the `AlertRule` enum in tx-watch-core. */
 export type AlertRule =
-  | (AlertRuleBase & { type: 'LargeTransfer'; threshold_xlm: number })
+  | (AlertRuleBase & {
+      type: 'LargeTransfer'
+      /** Threshold in whole units of `asset` (XLM when `asset` is absent). */
+      threshold_xlm: number
+      /** Optional asset code (e.g. USDC) or token contract ID; absent means XLM. */
+      asset?: string
+      /** Optional decimals of the asset's smallest unit (e.g. 7 for XLM/USDC SACs). */
+      decimals?: number
+    })
   | (AlertRuleBase & { type: 'AdminFunctionCalled'; function_names: string[] })
   | (AlertRuleBase & { type: 'FunctionCalled'; function_name: string })
   | (AlertRuleBase & { type: 'AnyTransaction' })
   | (AlertRuleBase & { type: 'TransactionFailed' })
+
+/** Display label for a LargeTransfer rule's asset ("XLM" when unset). */
+export function largeTransferAssetLabel(rule: {
+  asset?: string
+}): string {
+  const asset = rule.asset?.trim()
+  if (!asset) return 'XLM'
+  return asset.length > 12 ? `${asset.slice(0, 4)}...${asset.slice(-4)}` : asset
+}
 
 export function isRuleEnabled(rule: AlertRule): boolean {
   return rule.enabled !== false
@@ -59,7 +76,23 @@ export function parseAlertRule(value: unknown): AlertRule | null {
         r.threshold_xlm < 0
       )
         return null
-      return { ...base, type: r.type, threshold_xlm: r.threshold_xlm }
+      if (r.asset !== undefined && (typeof r.asset !== 'string' || !r.asset.trim()))
+        return null
+      if (
+        r.decimals !== undefined &&
+        (typeof r.decimals !== 'number' ||
+          !Number.isInteger(r.decimals) ||
+          r.decimals < 0 ||
+          r.decimals > 18)
+      )
+        return null
+      return {
+        ...base,
+        type: r.type,
+        threshold_xlm: r.threshold_xlm,
+        ...(r.asset !== undefined ? { asset: (r.asset as string).trim() } : {}),
+        ...(r.decimals !== undefined ? { decimals: r.decimals as number } : {}),
+      }
     case 'AdminFunctionCalled': {
       if (
         !Array.isArray(r.function_names) ||

@@ -1,4 +1,4 @@
-import { AlertRule } from '@/types'
+import { AlertRule, largeTransferAssetLabel } from '@/types'
 
 /**
  * Shared formatting helpers for dates used across the app.
@@ -114,7 +114,7 @@ export function formatRelativeTime(
 export function formatRuleSummary(rule: AlertRule): string {
   switch (rule.type) {
     case 'LargeTransfer':
-      return `> ${rule.threshold_xlm.toLocaleString()} XLM`
+      return `> ${rule.threshold_xlm.toLocaleString()} ${largeTransferAssetLabel(rule)}`
     case 'FunctionCalled':
       return rule.function_name || 'function'
     case 'AdminFunctionCalled':
