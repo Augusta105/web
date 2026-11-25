@@ -7,9 +7,13 @@ import {
 import { TEST_PAYLOAD_MAX_SKEW_MS, parseCanonicalTestPayload } from '@/lib/api'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
 import type { LookupAddress } from 'node:dns'
+import { parseSignatureHeader, SIGNATURE_HEADER } from '@/lib/webhookSignature'
+import { parseCanonicalTestPayload } from '@/lib/api'
+import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
+import { createRateLimiter } from '@/lib/rateLimit'
+import { getClientIp, trustedProxyHops } from '@/lib/clientIp'
 import {
   BlockedAddressError,
-  createRateLimiter,
   deliverWebhook,
   describeDeliveryError,
   redirectTarget,
@@ -26,6 +30,7 @@ const RATE_WINDOW_MS = 60_000
  */
 const TIMEOUT_MS = 10000
 
+// Per process unless a shared store is passed; see docs/rate-limiting.md.
 const rateLimit = createRateLimiter(RATE_LIMIT, RATE_WINDOW_MS)
 
 const STALE_MESSAGE = `Test payload is more than ${
@@ -55,15 +60,6 @@ function isSameOrigin(req: NextRequest): boolean {
   }
 }
 
-function clientIp(req: NextRequest): string {
-  return (
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    req.headers.get('x-real-ip') ||
-    req.ip ||
-    'unknown'
-  )
-}
-
 export async function POST(req: NextRequest) {
   const startTime = Date.now()
   const now = startTime
@@ -71,7 +67,8 @@ export async function POST(req: NextRequest) {
   if (!isSameOrigin(req))
     return fail(403, 'Cross-origin requests are not allowed')
 
-  const limit = rateLimit(clientIp(req))
+  const clientIp = getClientIp(req.headers, req.ip, trustedProxyHops())
+  const limit = await rateLimit(clientIp)
   if (!limit.allowed) {
     return fail(429, 'Too many test webhook requests', {
       'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)),
@@ -121,6 +118,11 @@ export async function POST(req: NextRequest) {
   if (
     signedAt !== null &&
     Math.abs(now / 1000 - signedAt) > DEFAULT_SIGNATURE_TOLERANCE_SECONDS
+  // The browser signs `body` as `t=<unix>,v1=<hex>` (lib/webhookSignature).
+  // The proxy cannot verify it (it has no secret), so it only checks the shape.
+  if (
+    signature !== undefined &&
+    (typeof signature !== 'string' || !parseSignatureHeader(signature))
   ) {
     return fail(400, STALE_MESSAGE)
   }
