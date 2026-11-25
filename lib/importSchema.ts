@@ -8,6 +8,7 @@ import {
 import { sanitizeAdminFunctionNames } from '@/lib/soroban'
 import { generateId } from '@/lib/id'
 import { validateThresholdNumber } from '@/lib/formatAmount'
+import { validateAlertPayload } from '@/lib/alertSource'
 
 /** Export file format, aligned with WatchedContract (uses contract_id, not address). */
 export interface ContractsSnapshot {
@@ -62,6 +63,8 @@ export interface ImportParseResult {
   contracts: WatchedContract[]
   errors: ImportEntryError[]
   alerts?: AlertHistoryEntry[]
+  /** Number of restored alerts dropped because they failed validation. */
+  skippedAlerts?: number
   settings?: BackupSettings
 }
 
@@ -83,12 +86,31 @@ function normalizeFunctionNames(names: string[]): string[] | string {
   return valid
 }
 
-export function buildSnapshot(contracts: WatchedContract[]): ContractsSnapshot {
+export interface BuildSnapshotOptions {
+  /** When true, webhook signing secrets are included in the export. */
+  includeSecrets?: boolean
+}
+
+/**
+ * Builds a contracts-only export snapshot. Webhook signing secrets are
+ * stripped unless `includeSecrets` is explicitly enabled, matching the CSV
+ * export behaviour of never leaking secrets by default.
+ */
+export function buildSnapshot(
+  contracts: WatchedContract[],
+  options: BuildSnapshotOptions = {}
+): ContractsSnapshot {
+  const includeSecrets = options.includeSecrets === true
+  const serialized = contracts.map((contract) => {
+    if (includeSecrets) return contract
+    const { webhook_secret: _secret, ...rest } = contract
+    return rest
+  })
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    count: contracts.length,
-    contracts,
+    count: serialized.length,
+    contracts: serialized,
   }
 }
 
@@ -143,21 +165,30 @@ export function buildBackup(
   }
 }
 
-/** Light shape check for alert-history entries; returns null when unusable. */
+/**
+ * Validates a restored alert with the same rules as core alerts and keeps only
+ * known fields; returns null when unusable.
+ */
 function validateAlertEntry(entry: unknown): AlertHistoryEntry | null {
-  if (typeof entry !== 'object' || entry === null) return null
-  const e = entry as Record<string, unknown>
-  if (typeof e.contract_id !== 'string' || !e.contract_id) return null
-  if (typeof e.timestamp !== 'number' || !Number.isFinite(e.timestamp))
-    return null
+  const payload = validateAlertPayload(entry)
+  if (typeof payload === 'string') return null
+  if (!NETWORKS.includes(payload.network as Network)) return null
+  const id = (entry as { id?: unknown }).id
   const result: AlertHistoryEntry = {
-    ...e,
-    contract_id: e.contract_id,
-    timestamp: e.timestamp,
+    label: payload.label,
+    contract_id: payload.contract_id,
+    network: payload.network as Network,
+    rule_triggered: payload.rule_triggered,
+    transaction_hash: payload.transaction_hash,
+    timestamp: payload.timestamp,
+    horizon_link: payload.horizon_link,
   }
-  if (typeof e.id === 'string' && e.id) result.id = e.id
-  if (NETWORKS.includes(e.network as Network))
-    result.network = e.network as Network
+  if (!result.contract_id) return null
+  if (typeof id === 'string' && id) result.id = id
+  if (payload.function_name !== undefined)
+    result.function_name = payload.function_name
+  if (payload.amount !== undefined) result.amount = payload.amount
+  if (payload.is_test !== undefined) result.is_test = payload.is_test
   return result
 }
 
@@ -169,8 +200,7 @@ function validateRule(rule: unknown): AlertRule | string {
   if (!parsed) {
     if (type === 'LargeTransfer') {
       const threshold = (rule as { threshold_xlm?: unknown }).threshold_xlm
-      if (typeof threshold !== 'number')
-        return 'threshold_xlm must be a number'
+      if (typeof threshold !== 'number') return 'threshold_xlm must be a number'
       return `invalid threshold_xlm: ${validateThresholdNumber(threshold) ?? 'must be a valid number'}`
     }
     if (type === 'AdminFunctionCalled')
@@ -192,8 +222,10 @@ const WEBHOOK_URL_IMPORT_ERRORS: Record<
 > = {
   invalid_url: 'invalid webhook_url: must be a valid URL',
   credentials_in_url: 'invalid webhook_url: must not contain credentials',
-  http_on_mainnet: 'invalid webhook_url: http is not allowed on mainnet; use https',
-  loopback_not_allowed: 'invalid webhook_url: loopback addresses are not allowed',
+  http_on_mainnet:
+    'invalid webhook_url: http is not allowed on mainnet; use https',
+  loopback_not_allowed:
+    'invalid webhook_url: loopback addresses are not allowed',
   private_ip_not_allowed:
     'invalid webhook_url: private network addresses are not allowed',
   link_local_not_allowed:
@@ -210,7 +242,8 @@ export function validateContractEntry(
   if (typeof e.contract_id !== 'string' || !isValidContractId(e.contract_id))
     return 'invalid contract_id'
   if (!NETWORKS.includes(e.network as Network)) return 'invalid network'
-  if (typeof e.webhook_url !== 'string') return 'invalid webhook_url: must be a string'
+  if (typeof e.webhook_url !== 'string')
+    return 'invalid webhook_url: must be a string'
   const urlResult = validateWebhookUrl(e.webhook_url, e.network as Network)
   if (!urlResult.valid && urlResult.code && urlResult.code !== 'http_warning') {
     return WEBHOOK_URL_IMPORT_ERRORS[urlResult.code]
@@ -230,8 +263,7 @@ export function validateContractEntry(
     return `label must be ${MAX_LABEL_LENGTH} characters or less`
   const now = Date.now()
   const contract: WatchedContract = {
-    id:
-      typeof e.id === 'string' && e.id ? e.id : generateId(),
+    id: typeof e.id === 'string' && e.id ? e.id : generateId(),
     label: trimmedLabel || e.contract_id,
     contract_id: e.contract_id,
     network: e.network as Network,
@@ -295,16 +327,18 @@ export function parseImport(json: string): ImportParseResult {
 
   const rawAlerts = (envelope as { alerts?: unknown }).alerts
   const alerts: AlertHistoryEntry[] = []
+  let skippedAlerts = 0
   if (Array.isArray(rawAlerts)) {
     for (const entry of rawAlerts) {
       const result = validateAlertEntry(entry)
       if (result) alerts.push(result)
+      else skippedAlerts++
     }
   }
   const settings = normalizeSettings(
     (envelope as { settings?: unknown }).settings
   )
-  return { contracts, errors, alerts, settings }
+  return { contracts, errors, alerts, skippedAlerts, settings }
 }
 
 export type ImportMode = 'merge' | 'replace'
