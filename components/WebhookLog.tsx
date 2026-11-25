@@ -1,6 +1,12 @@
 'use client'
 
-import { AlertPayload, AlertRuleType, Network, isAlertRuleType } from '@/types'
+import {
+  AlertPayload,
+  AlertRuleType,
+  Network,
+  isAlertRuleType,
+  parseDeliveryStatus,
+} from '@/types'
 import { explorerTxUrl, truncateId } from '@/lib/stellar'
 import EmptyState from './EmptyState'
 import CopyButton from '@/components/CopyButton'
@@ -58,7 +64,7 @@ export function toWebhookEntry(alert: AlertPayload): WebhookEntry {
     timestamp: new Date(alert.timestamp).toISOString(),
     event: alert.rule_triggered,
     contractAddress: alert.contract_id,
-    status: 'success',
+    status: parseDeliveryStatus(alert.delivery_status),
     amount: alert.amount?.toString(),
     txHash: alert.transaction_hash,
     payload: alert as unknown as Record<string, unknown>,
@@ -253,7 +259,9 @@ export default function WebhookLog({
 
     const qs = params.toString()
     if (typeof window !== 'undefined') {
-      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+      const newUrl = qs
+        ? `${window.location.pathname}?${qs}`
+        : window.location.pathname
       window.history.replaceState(null, '', newUrl)
     }
   }, [selectedFilter, debouncedSearch, range, customFrom, customTo, sortDirection, currentPage, showTestDeliveries])
@@ -483,6 +491,7 @@ export default function WebhookLog({
                     </td>
                     <td className="py-3 pr-4 text-zinc-400">
                       {alert.amount !== undefined
+                        ? `${formatAmount(alert.amount)} XLM`
                         ? formatAmount(alert.amount)
                         : 'N/A'}
                     </td>

@@ -2,6 +2,18 @@
 
 import React, { useCallback, useState } from 'react'
 import { formatAmount } from '@/lib/formatAmount'
+import { truncateId } from '@/lib/stellar'
+import { formatDateTime } from '@/lib/format'
+import { explorerContractUrl, explorerTxUrl } from '@/lib/explorer'
+import Modal from '@/components/Modal'
+import {
+  AlertPayload,
+  DeliveryStatus,
+  Network,
+  parseDeliveryStatus,
+} from '@/types'
+
+export interface WebhookEntry {
 import { truncateId, explorerTxUrl } from '@/lib/stellar'
 import { formatDateTime } from '@/lib/format'
 import { explorerContractUrl } from '@/lib/explorer'
@@ -23,6 +35,8 @@ export interface WebhookEntry {
   timestamp: string
   event: string
   contractAddress?: string
+  /** Delivery outcome. Absent when the source does not report one. */
+  status?: DeliveryStatus
   status: 'success' | 'failed' | 'pending'
   amount?: string
   asset?: string
@@ -37,6 +51,7 @@ export interface WebhookLogCardProps {
   onClick?: () => void
 }
 
+const STATUS_STYLES: Record<DeliveryStatus, string> = {
 const STATUS_STYLES: Record<WebhookEntry['status'], string> = {
   success:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
@@ -54,7 +69,7 @@ function normalizeEntry(props: WebhookLogCardProps): WebhookEntry {
       timestamp: new Date(a.timestamp).toISOString(),
       event: a.rule_triggered,
       contractAddress: a.contract_id,
-      status: 'success',
+      status: parseDeliveryStatus(a.delivery_status),
       amount: a.amount !== undefined ? String(a.amount) : undefined,
       asset: 'XLM',
       txHash: a.transaction_hash,
@@ -127,6 +142,7 @@ export function WebhookLogCard({
     txHref ??
     (data.contractAddress
       ? explorerContractUrl(network, data.contractAddress)
+      : null)
       : null) ??
     undefined
 
@@ -152,14 +168,18 @@ export function WebhookLogCard({
               </span>
             )}
           </span>
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[data.status]}`}
-          >
-            {data.status}
-          </span>
+          {data.status && (
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[data.status]}`}
+            >
+              {data.status}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span aria-label="Time" title={formatDateTime(data.timestamp)}>
+            {formatDateTime(data.timestamp)}
           <span
             aria-label="Time"
             title={formatDateTime(new Date(data.timestamp).getTime())}
@@ -189,6 +209,22 @@ export function WebhookLogCard({
         {data.txHash && (
           <div className="text-xs">
             <span className="text-muted-foreground">Tx: </span>
+            {txHref ? (
+              <a
+                href={txHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="font-mono text-primary hover:underline break-all"
+                aria-label={`View transaction ${data.txHash} on Stellar Explorer`}
+              >
+                {truncateId(data.txHash)}
+              </a>
+            ) : (
+              <span className="font-mono break-all">
+                {truncateId(data.txHash)}
+              </span>
+            )}
             <a
               href={explorerTxUrl(network, data.txHash) ?? undefined}
               target="_blank"

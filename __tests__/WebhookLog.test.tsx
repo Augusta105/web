@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
-import WebhookLog from '@/components/WebhookLog'
+import WebhookLog, { toWebhookEntry } from '@/components/WebhookLog'
 import { AlertPayload } from '@/types'
 import { formatRelativeTime } from '@/lib/format'
 
@@ -325,5 +325,17 @@ describe('WebhookLog', () => {
       })
       expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url')
     })
+  })
+})
+
+describe('toWebhookEntry delivery status', () => {
+  it('carries the reported delivery status through', () => {
+    expect(
+      toWebhookEntry({ ...baseAlert, delivery_status: 'failed' }).status
+    ).toBe('failed')
+  })
+
+  it('leaves status undefined when the core reports none', () => {
+    expect(toWebhookEntry(baseAlert).status).toBeUndefined()
   })
 })

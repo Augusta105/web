@@ -146,6 +146,8 @@ export default function FreighterConnect({
       setUserDisconnectedState(false)
       publish(session.publicKey)
       setNetwork(session.network ?? null)
+      // onConnect fires from the publicKey effect above; calling it here too
+      // would notify the parent twice for one connection.
       if (!session.network) {
         // Network details were slow or failed after approval: re-read them in
         // the background instead of blocking or failing the connection.

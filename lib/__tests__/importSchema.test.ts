@@ -4,6 +4,7 @@ import {
   parseImport,
   validateContractEntry,
 } from '../importSchema'
+import type { WatchedContract } from '@/types'
 
 // A checksum-valid contract StrKey (all-zero hash).
 const CID = StrKey.encodeContract(Buffer.alloc(32))
@@ -323,5 +324,43 @@ describe('label rules', () => {
       'label',
       CID
     )
+  })
+})
+
+describe('webhook format and headers on import (#408, #409)', () => {
+  const entry = {
+    contract_id: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+    network: 'testnet',
+    webhook_url: 'https://example.com/hook',
+    rules: [],
+  }
+
+  it('keeps a known non-default format', () => {
+    const result = validateContractEntry({ ...entry, webhook_format: 'slack' })
+    expect(typeof result).not.toBe('string')
+    expect((result as WatchedContract).webhook_format).toBe('slack')
+  })
+
+  it('drops the default json format so older records stay unchanged', () => {
+    const result = validateContractEntry({ ...entry, webhook_format: 'json' })
+    expect((result as WatchedContract).webhook_format).toBeUndefined()
+  })
+
+  it('rejects an unknown format', () => {
+    expect(
+      validateContractEntry({ ...entry, webhook_format: 'teams' })
+    ).toMatch(/invalid webhook_format/)
+  })
+
+  it('keeps valid headers and rejects reserved ones', () => {
+    const ok = validateContractEntry({
+      ...entry,
+      webhook_headers: { Authorization: 'Bearer t' },
+    }) as WatchedContract
+    expect(ok.webhook_headers).toEqual({ Authorization: 'Bearer t' })
+
+    expect(
+      validateContractEntry({ ...entry, webhook_headers: { Host: 'x' } })
+    ).toMatch(/invalid webhook_headers/)
   })
 })

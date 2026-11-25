@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { WatchedContract, AlertPayload, AlertRule, WebhookFormat, isRuleEnabled } from '@/types'
+import { WEBHOOK_FORMAT_LABELS, suggestWebhookFormat } from '@/lib/webhookFormat'
+import WebhookFormatField from '@/components/WebhookFormatField'
 import {
   WatchedContract,
   AlertPayload,
@@ -40,6 +43,8 @@ import { deploymentBlocksSave } from '@/lib/contractExists'
 import AlertRuleBadge from '@/components/AlertRuleBadge'
 import WebhookLog from '@/components/WebhookLog'
 import WebhookTestButton from '@/components/WebhookTestButton'
+import WebhookHeadersField from '@/components/WebhookHeadersField'
+import { maskWebhookHeaderValue } from '@/lib/webhookHeaders'
 import RuleBuilder from '@/components/RuleBuilder'
 import CopyButton from '@/components/CopyButton'
 import NotificationToggle from '@/components/NotificationToggle'
@@ -83,6 +88,10 @@ export default function ContractDetailPage({
   const [editedNetwork, setEditedNetwork] =
     useState<WatchedContract['network']>('testnet')
   const [editedWebhookSecret, setEditedWebhookSecret] = useState('')
+  const [editedWebhookHeaders, setEditedWebhookHeaders] = useState<Record<string, string>>({})
+  const [editedWebhookFormat, setEditedWebhookFormat] = useState<WebhookFormat>('json')
+  // Re-keys the header editor so it re-reads the stored headers on each open.
+  const [metadataFormKey, setMetadataFormKey] = useState(0)
   const [metadataError, setMetadataError] = useState<string | null>(null)
   const [metadataWarning, setMetadataWarning] = useState<string | null>(null)
   const [editedLabelWarning, setEditedLabelWarning] = useState<string | null>(
@@ -270,6 +279,9 @@ export default function ContractDetailPage({
     setEditedWebhookUrl(contract!.webhook_url)
     setEditedNetwork(contract!.network)
     setEditedWebhookSecret(contract!.webhook_secret ?? '')
+    setEditedWebhookHeaders(contract!.webhook_headers ?? {})
+    setEditedWebhookFormat(contract!.webhook_format ?? 'json')
+    setMetadataFormKey((key) => key + 1)
     setMetadataError(null)
     setMetadataWarning(null)
     setEditedLabelWarning(null)
@@ -346,6 +358,9 @@ export default function ContractDetailPage({
       webhook_url: trimmedWebhookUrl,
       network: editedNetwork,
       webhook_secret: editedWebhookSecret.trim() || undefined,
+      webhook_headers:
+        Object.keys(editedWebhookHeaders).length > 0 ? editedWebhookHeaders : undefined,
+      webhook_format: editedWebhookFormat === 'json' ? undefined : editedWebhookFormat,
       updated_at: Date.now(),
     }
 
@@ -376,7 +391,9 @@ export default function ContractDetailPage({
       editedLabel !== contract?.label ||
       editedWebhookUrl !== contract?.webhook_url ||
       editedNetwork !== contract?.network ||
-      editedWebhookSecret !== (contract?.webhook_secret ?? '')
+      editedWebhookSecret !== (contract?.webhook_secret ?? '') ||
+      JSON.stringify(editedWebhookHeaders) !== JSON.stringify(contract?.webhook_headers ?? {}) ||
+      editedWebhookFormat !== (contract?.webhook_format ?? 'json')
     )
   }
 
@@ -627,6 +644,20 @@ export default function ContractDetailPage({
             </div>
           </div>
 
+          <WebhookFormatField
+            id="edit-contract-format"
+            format={editedWebhookFormat}
+            suggestedFormat={suggestWebhookFormat(editedWebhookUrl)}
+            onChange={setEditedWebhookFormat}
+          />
+
+          <WebhookHeadersField
+            key={metadataFormKey}
+            idPrefix="edit-contract"
+            headers={editedWebhookHeaders}
+            onChange={setEditedWebhookHeaders}
+          />
+
           <NetworkEditField
             currentNetwork={editedNetwork}
             onNetworkChange={(network) => {
@@ -686,6 +717,8 @@ export default function ContractDetailPage({
               network={editedNetwork}
               rule={testRule}
               secret={editedWebhookSecret}
+              headers={editedWebhookHeaders}
+              format={editedWebhookFormat}
             />
             <div className="flex gap-2">
               <button
@@ -857,12 +890,26 @@ export default function ContractDetailPage({
           </span>
           <CopyButton text={contract.webhook_url} />
         </div>
+        <p className="text-xs text-zinc-500">
+          Format: {WEBHOOK_FORMAT_LABELS[contract.webhook_format ?? 'json']}
+        </p>
+        {Object.keys(contract.webhook_headers ?? {}).length > 0 && (
+          <ul aria-label="Custom webhook headers" className="space-y-1 text-xs font-mono text-zinc-400">
+            {Object.entries(contract.webhook_headers ?? {}).map(([name, value]) => (
+              <li key={name}>
+                {name}: {maskWebhookHeaderValue(value)}
+              </li>
+            ))}
+          </ul>
+        )}
         <WebhookTestButton
           url={contract.webhook_url}
           contractId={contract.contract_id}
           network={contract.network}
           rule={testRule}
           secret={contract.webhook_secret}
+          headers={contract.webhook_headers}
+          format={contract.webhook_format}
         />
       </div>
 

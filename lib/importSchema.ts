@@ -1,5 +1,6 @@
 import type { AlertRule, Network, WatchedContract } from '@/types'
-import { isAlertRuleType, parseAlertRule } from '@/types'
+import { isAlertRuleType, isWebhookFormat, parseAlertRule } from '@/types'
+import { parseWebhookHeaders } from '@/lib/webhookHeaders'
 import {
   isValidContractId,
   validateWebhookUrl,
@@ -251,6 +252,13 @@ export function validateContractEntry(
   if (e.webhook_secret !== undefined && typeof e.webhook_secret !== 'string') {
     return 'webhook_secret must be a string'
   }
+  if (e.webhook_format !== undefined && !isWebhookFormat(e.webhook_format)) {
+    return 'invalid webhook_format: must be json, slack or discord'
+  }
+  const webhookHeaders = parseWebhookHeaders(e.webhook_headers)
+  if (webhookHeaders === null) {
+    return 'invalid webhook_headers: must be a map of up to 5 valid header names to values'
+  }
   if (!Array.isArray(e.rules)) return 'rules must be an array'
   const rules: AlertRule[] = []
   for (const rule of e.rules) {
@@ -275,6 +283,12 @@ export function validateContractEntry(
   if (typeof e.enabled === 'boolean') contract.enabled = e.enabled
   if (typeof e.webhook_secret === 'string' && e.webhook_secret.trim()) {
     contract.webhook_secret = e.webhook_secret.trim()
+  }
+  if (Object.keys(webhookHeaders).length > 0) {
+    contract.webhook_headers = webhookHeaders
+  }
+  if (isWebhookFormat(e.webhook_format) && e.webhook_format !== 'json') {
+    contract.webhook_format = e.webhook_format
   }
   return contract
 }

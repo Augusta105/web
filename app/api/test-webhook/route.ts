@@ -9,6 +9,8 @@ import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
 import type { LookupAddress } from 'node:dns'
 import { parseSignatureHeader, SIGNATURE_HEADER } from '@/lib/webhookSignature'
 import { parseCanonicalTestPayload } from '@/lib/api'
+import { isWebhookFormat, type WebhookFormat } from '@/types'
+import { selectTestDeliveryHeaders } from '@/lib/webhookHeaders'
 import { classifyHost, isIpLiteral } from '@/lib/ipRanges'
 import { createRateLimiter } from '@/lib/rateLimit'
 import { getClientIp, trustedProxyHops } from '@/lib/clientIp'
@@ -20,6 +22,16 @@ import {
   resolvePublicAddresses,
 } from '@/lib/webhookProxy'
 
+/**
+ * Request bodies are small ({ url, body, signature, format, payload, headers }).
+ * Headers and the alert payload together can exceed 4 KB.
+ */
+const MAX_BODY_BYTES = 8192
+/**
+ * Signature computed in the browser over `body` (lib/webhookSignature):
+ * `t=<unix seconds>,v1=<hex HMAC-SHA256>`.
+ */
+const SIGNATURE_FORMAT = /^t=\d+,v1=[0-9a-f]{64}$/
 /** Request bodies are small ({ url, body, signature }). */
 const MAX_BODY_BYTES = 4096
 const RATE_LIMIT = 10
@@ -99,6 +111,14 @@ export async function POST(req: NextRequest) {
     return fail(400, 'Do not send the signing secret; send a signature')
   if (!url || typeof url !== 'string')
     return fail(400, 'A valid url is required')
+  // Default to the raw JSON payload; Slack and Discord bodies are checked
+  // against the alert they summarise (#409).
+  const format = data.format ?? 'json'
+  if (!isWebhookFormat(format)) return fail(400, 'Unsupported webhook format')
+  if (
+    typeof body !== 'string' ||
+    !parseCanonicalTestPayload(body, format as WebhookFormat, data.payload)
+  ) {
   // Signature computed in the browser over `body` (lib/webhookSignature).
   let signedAt: number | null = null
   if (signature !== undefined) {
@@ -163,7 +183,11 @@ export async function POST(req: NextRequest) {
   // Only dashboard-built test payloads are forwarded (#261), byte for byte,
   // with the browser's signature header passed through unchanged.
   const bodyString = body
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // Only allow-listed custom headers are forwarded (#408); the rest are dropped.
+  const headers: Record<string, string> = {
+    ...selectTestDeliveryHeaders(data.headers),
+    'Content-Type': 'application/json',
+  }
   if (typeof signature === 'string') headers[SIGNATURE_HEADER] = signature
 
   try {

@@ -1,7 +1,15 @@
 import { horizonUrl, isValidContractId } from '@/lib/stellar'
 import { SIGNATURE_HEADER, signWebhookPayload } from './webhookSignature'
+import { selectTestDeliveryHeaders } from './webhookHeaders'
+import { formatWebhookBody } from './webhookFormat'
 import { sanitizeBodySnippet } from './bodySnippet'
 import { getAuthorizationHeader, notifyAuthRequired } from './apiAuth'
+import type {
+  AlertPayload,
+  AlertRule,
+  Network,
+  WebhookFormat,
+} from '@/types'
 import { isValidFunctionName } from '@/lib/soroban'
 import { largeTransferAssetLabel } from '@/types'
 import type { AlertPayload, AlertRule, Network } from '@/types'
@@ -301,6 +309,17 @@ export interface ParseCanonicalTestPayloadOptions {
  */
 export function parseCanonicalTestPayload(
   body: string,
+  format: WebhookFormat = 'json',
+  sentPayload?: unknown
+): AlertPayload | null {
+  if (format !== 'json') {
+    // Slack/Discord bodies hold only a summary, so the alert arrives as
+    // `payload`. It must be canonical, and the formatted body must be exactly
+    // what that alert renders to.
+    const alert = parseCanonicalTestPayload(JSON.stringify(sentPayload ?? null))
+    if (!alert) return null
+    return formatWebhookBody(alert, format) === body ? alert : null
+  }
   {
     now = Date.now(),
     maxSkewMs = TEST_PAYLOAD_MAX_SKEW_MS,
@@ -356,6 +375,13 @@ interface SendTestWebhookTransport {
    * HMAC-SHA256 (timestamped, `t=…,v1=…`) and sent in the `SIGNATURE_HEADER` header.
    */
   secret?: string
+  /** Body shape for the receiver. Absent = `json`. */
+  format?: WebhookFormat
+  /**
+   * Custom headers from the watched contract. Only names on the test-delivery
+   * allow-list are sent; the rest are dropped (see lib/webhookHeaders).
+   */
+  headers?: Record<string, string>
 }
 
 export type SendTestWebhookOptions = SendTestWebhookTransport &
@@ -369,7 +395,8 @@ export async function sendTestWebhook(
   webhookUrl: string,
   options: SendTestWebhookOptions
 ): Promise<TestWebhookResult> {
-  const { signalOrTimeoutMs = 10000, secret } = options
+  const { signalOrTimeoutMs = 10000, secret, format = 'json' } = options
+  const deliveryHeaders = selectTestDeliveryHeaders(options.headers)
   const payload =
     'payload' in options && options.payload
       ? options.payload
@@ -420,8 +447,12 @@ export async function sendTestWebhook(
   const signal = combinedController.signal
 
   try {
-    const body = JSON.stringify(payload)
+    const body =
+      format === 'json'
+        ? JSON.stringify(payload)
+        : formatWebhookBody(payload, format)
     const headers: Record<string, string> = {
+      ...deliveryHeaders,
       'Content-Type': 'application/json',
     }
     if (secret)
@@ -443,6 +474,10 @@ export async function sendTestWebhook(
           body,
           ...(headers[SIGNATURE_HEADER]
             ? { signature: headers[SIGNATURE_HEADER] }
+            : {}),
+          ...(format !== 'json' ? { format, payload } : {}),
+          ...(Object.keys(deliveryHeaders).length > 0
+            ? { headers: deliveryHeaders }
             : {}),
         }),
         signal,

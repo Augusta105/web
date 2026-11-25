@@ -178,6 +178,7 @@ function getStorageSize(): number {
     if (!key) continue
     const value = storage.getItem(key)
     if (value !== null) {
+      size += (value.length + key.length) * 2
       size += entrySize(key, value)
     }
   }

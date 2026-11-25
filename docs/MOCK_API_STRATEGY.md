@@ -40,6 +40,28 @@ A minimal mock that serves the contract routes (`mock-server.js`):
 ```javascript
 const http = require('http')
 
+const mockContract = {
+  id: 'test-123',
+  label: 'Test Contract',
+  contract_id: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+  network: 'testnet',
+  rules: [{ type: 'LargeTransfer', threshold_xlm: 1000 }],
+  webhook_url: 'https://webhook.site/test',
+  created_at: Date.now(),
+  updated_at: Date.now(),
+}
+
+const mockAlertPayload = {
+  label: 'Test Contract',
+  contract_id: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+  network: 'testnet',
+  rule_triggered: 'LargeTransfer',
+  transaction_hash: 'abc123def456',
+  function_name: 'transfer',
+  amount: 5000,
+  timestamp: Date.now(),
+  horizon_link: 'https://horizon-testnet.stellar.org/transactions/abc123def456',
+}
 const contracts = [
   {
     id: 'test-123',
@@ -91,6 +113,22 @@ If you run the mock on a different origin, its origin must also be allowed by th
 3. When the real API is ready, update `NEXT_PUBLIC_API_URL`.
 4. Tests verify the API layer handles responses correctly.
 
+## Assumed core fields
+
+The dashboard reads the fields below. They are optional and are not yet in
+`tx-watch-core`, so the dashboard must work without them. Each one needs a
+matching core change before it is relied on in production.
+
+| Object                         | Field             | Values                                                                        | Behaviour when absent                                          |
+| ------------------------------ | ----------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Alert payload (`AlertPayload`) | `delivery_status` | `success`, `failed`, `pending`                                                | No status badge. The dashboard never assumes `success` (#407). |
+| Contract (`WatchedContract`)   | `webhook_headers` | Map of header name to value; at most 5 names; no hop-by-hop headers or `Host` | No custom headers are sent (#408).                             |
+| Contract (`WatchedContract`)   | `webhook_format`  | `json`, `slack`, `discord`                                                    | `json`, the raw alert payload (#409).                          |
+
+Test deliveries only send the headers on the proxy allow-list
+(`authorization`, `x-api-key`, `x-auth-token`, `x-webhook-token`). Header values
+are credentials; see `docs/storage-schema.md`.
+
 ## Testing
 
 Use `apiFetch()` from `lib/api.ts` for all API calls. Mock it or `fetch` in tests with Vitest:
@@ -104,11 +142,13 @@ vi.mock('@/lib/api', () => ({
   isApiConfigured: vi.fn().mockReturnValue(true),
 }))
 
+// Or stub fetch globally
 // Or stub fetch globally; apiFetch reads the body with `res.text()`
 vi.stubGlobal(
   'fetch',
   vi.fn().mockResolvedValue({
     ok: true,
+    json: async () => ({ data: [] }),
     status: 200,
     text: async () => JSON.stringify([]),
   })

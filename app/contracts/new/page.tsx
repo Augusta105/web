@@ -2,6 +2,9 @@
 
 import { useState, useRef, useEffect, useMemo, useId } from 'react'
 import { useRouter } from 'next/navigation'
+import { AlertPayload, AlertRule, Network, WatchedContract, WebhookFormat, parseAlertRule } from '@/types'
+import { suggestWebhookFormat } from '@/lib/webhookFormat'
+import WebhookFormatField from '@/components/WebhookFormatField'
 import {
   AlertPayload,
   AlertRule,
@@ -23,6 +26,12 @@ import {
   describeRule,
   TEST_CONTRACT_ID,
 } from '@/lib/api'
+import {
+  sendTestWebhook,
+  type TestWebhookResult,
+} from '@/lib/api'
+import WebhookTestButton from '@/components/WebhookTestButton'
+import WebhookHeadersField from '@/components/WebhookHeadersField'
 import WebhookTestButton from '@/components/WebhookTestButton'
 import { generateWebhookSecret } from '@/lib/webhookSignature'
 import { generateId } from '@/lib/id'
@@ -60,6 +69,11 @@ export default function NewContractPage() {
   const [network, setNetwork] = useState<Network>('testnet')
   const [webhookUrl, setWebhookUrl] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
+  const [webhookHeaders, setWebhookHeaders] = useState<Record<string, string>>({})
+  const [webhookFormat, setWebhookFormat] = useState<WebhookFormat>('json')
+  // Until the user picks a format, the URL's suggestion is applied automatically.
+  const [formatTouched, setFormatTouched] = useState(false)
+  const [webhookUrlWarning, setWebhookUrlWarning] = useState<string | null>(null)
   const [webhookUrlWarning, setWebhookUrlWarning] = useState<string | null>(
     null
   )
@@ -433,6 +447,9 @@ export default function NewContractPage() {
       rules,
       webhook_url: webhookUrl.trim(),
       webhook_secret: webhookSecret.trim() || undefined,
+      webhook_headers:
+        Object.keys(webhookHeaders).length > 0 ? webhookHeaders : undefined,
+      webhook_format: webhookFormat === 'json' ? undefined : webhookFormat,
       created_at: Date.now(),
       updated_at: Date.now(),
       enabled: true,
@@ -757,6 +774,7 @@ export default function NewContractPage() {
               onChange={(e) => {
                 const val = e.target.value
                 setWebhookUrl(val)
+                if (!formatTouched) setWebhookFormat(suggestWebhookFormat(val))
                 setErrors((prev) => ({ ...prev, webhook_url: undefined }))
                 const trimmed = val.trim()
                 if (!trimmed) {
@@ -802,6 +820,17 @@ export default function NewContractPage() {
             )}
           </div>
 
+          {/* Payload format (#409) */}
+          <WebhookFormatField
+            id="new-contract-format"
+            format={webhookFormat}
+            suggestedFormat={suggestWebhookFormat(webhookUrl)}
+            onChange={(next) => {
+              setFormatTouched(true)
+              setWebhookFormat(next)
+            }}
+          />
+
           {/* Webhook Signing Secret */}
           <div>
             <label
@@ -835,6 +864,13 @@ export default function NewContractPage() {
               CSV exports.
             </p>
           </div>
+
+          {/* Custom Webhook Headers (#408) */}
+          <WebhookHeadersField
+            idPrefix="new-contract"
+            headers={webhookHeaders}
+            onChange={setWebhookHeaders}
+          />
 
           {/* Rules */}
           <div ref={rulesRef}>
@@ -952,6 +988,8 @@ export default function NewContractPage() {
             network={network}
             rule={testRule}
             secret={webhookSecret}
+            headers={webhookHeaders}
+            format={webhookFormat}
           />
         </form>
       </div>

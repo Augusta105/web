@@ -18,6 +18,31 @@ const ALERT_RULE_TYPES: readonly AlertRuleType[] = [
   'TransactionFailed',
 ]
 
+/** Outcome of a webhook delivery, as reported by the core when it is known. */
+export const DELIVERY_STATUSES = ['success', 'failed', 'pending'] as const
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number]
+
+/** Parses an untrusted delivery status. Unknown or missing values yield undefined. */
+export function parseDeliveryStatus(
+  value: unknown
+): DeliveryStatus | undefined {
+  return typeof value === 'string' &&
+    (DELIVERY_STATUSES as readonly string[]).includes(value)
+    ? (value as DeliveryStatus)
+    : undefined
+}
+
+/** Body shape a receiver expects. `json` is the raw AlertPayload. */
+export const WEBHOOK_FORMATS = ['json', 'slack', 'discord'] as const
+export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number]
+
+export function isWebhookFormat(value: unknown): value is WebhookFormat {
+  return (
+    typeof value === 'string' &&
+    (WEBHOOK_FORMATS as readonly string[]).includes(value)
+  )
+}
+
 export function isAlertRuleType(value: unknown): value is AlertRuleType {
   return (
     typeof value === 'string' &&
@@ -158,6 +183,12 @@ export interface WatchedContract {
   /** Optional signing secret used to sign webhook deliveries. */
   webhook_secret?: string
   /**
+   * Extra headers sent with each delivery, e.g. an Authorization token. Values
+   * are credentials. Assumed core field, see docs/MOCK_API_STRATEGY.md.
+   */
+  webhook_headers?: Record<string, string>
+  /** Body shape for deliveries. Absent = `json`. Assumed core field, see docs/MOCK_API_STRATEGY.md. */
+  webhook_format?: WebhookFormat
    * Previous signing secret, kept during the rotation grace period so
    * deliveries are signed with both secrets (two `v1=` entries).
    */
@@ -186,4 +217,7 @@ export interface AlertPayload {
   /** Set on simulated (test) deliveries so receivers can tell them from real
    *  alerts. Mirrored by the `is_test` field of tx-watch-core's payload. */
   is_test?: boolean
+  /** Delivery outcome. Assumed core field, see docs/MOCK_API_STRATEGY.md.
+   *  Absent means unknown: never treat a missing value as a success. */
+  delivery_status?: DeliveryStatus
 }
