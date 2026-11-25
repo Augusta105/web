@@ -76,6 +76,44 @@ const STORAGE_QUOTA_BYTES = 5 * 1024 * 1024
 const MAX_ALERTS_PER_CONTRACT = 500
 export const MAX_RULES_PER_CONTRACT = 20
 const DEFAULT_RETENTION_DAYS = 90
+const ALERTS_PRUNED_EVENT = 'txwatch:alerts-pruned'
+
+export interface AlertPruneResult {
+  prunedCount: number
+  oldestPrunedTimestamp: number | null
+}
+
+const NO_PRUNE: AlertPruneResult = { prunedCount: 0, oldestPrunedTimestamp: null }
+
+function notifyAlertsPruned(result: AlertPruneResult) {
+  if (result.prunedCount <= 0) return
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent<AlertPruneResult>(ALERTS_PRUNED_EVENT, { detail: result })
+  )
+}
+
+function computePruneResult(
+  original: AlertPayload[],
+  kept: AlertPayload[]
+): AlertPruneResult {
+  if (kept.length >= original.length) return NO_PRUNE
+  const keptSet = new Set(kept)
+  let prunedCount = 0
+  let oldestPrunedTimestamp: number | null = null
+  for (const alert of original) {
+    if (keptSet.has(alert)) continue
+    prunedCount++
+    if (
+      oldestPrunedTimestamp === null ||
+      alert.timestamp < oldestPrunedTimestamp
+    ) {
+      oldestPrunedTimestamp = alert.timestamp
+    }
+  }
+  return { prunedCount, oldestPrunedTimestamp }
+}
+=======
 
 export function getMaxAlertsPerContract(): number {
   return getAlertCap()
@@ -148,6 +186,7 @@ function getStorageSize(): number {
   return size
 }
 
+export function pruneOldAlerts(): AlertPruneResult {
 // Like `storage.setItem` (it throws the same way) but keeps the size cache in
 // step with the write instead of forcing a full recount.
 function setTrackedItem(storage: Storage, key: string, value: string) {
@@ -162,34 +201,40 @@ function setTrackedItem(storage: Storage, key: string, value: string) {
 
 export function pruneOldAlerts() {
   const storage = getStorage()
-  if (!storage) return
+  if (!storage) return NO_PRUNE
   const cutoff = Date.now() - getRetentionDays() * 24 * 60 * 60 * 1000
   const alerts = load<AlertPayload>(ALERTS_KEY)
   const withinRetention = alerts.filter((a) => a.timestamp >= cutoff)
   const pruned = capAlertsPerContract(withinRetention)
-  if (pruned.length < alerts.length) {
+  const result = computePruneResult(alerts, pruned)
+  if (result.prunedCount > 0) {
     try {
       setTrackedItem(storage, ALERTS_KEY, JSON.stringify(pruned))
     } catch {
       // best effort
     }
+    notifyAlertsPruned(result)
   }
+  return result
 }
 
-function trimAlertsToRetention() {
+function trimAlertsToRetention(): AlertPruneResult {
   const storage = getStorage()
-  if (!storage) return
+  if (!storage) return NO_PRUNE
   const alerts = load<AlertPayload>(ALERTS_KEY)
   const cutoff = Date.now() - getRetentionDays() * 24 * 60 * 60 * 1000
   const withinRetention = alerts.filter((a) => a.timestamp >= cutoff)
   const trimmed = capAlertsPerContract(withinRetention)
-  if (trimmed.length < alerts.length) {
+  const result = computePruneResult(alerts, trimmed)
+  if (result.prunedCount > 0) {
     try {
       setTrackedItem(storage, ALERTS_KEY, JSON.stringify(trimmed))
     } catch {
       // best effort
     }
+    notifyAlertsPruned(result)
   }
+  return result
 }
 
 function isQuotaError(err: unknown): boolean {
@@ -219,6 +264,26 @@ function writeItem(storage: Storage, key: string, value: string): boolean {
   }
 }
 
+function writeItemWithPrune(
+  storage: Storage,
+  key: string,
+  value: string
+): { ok: boolean; prune: AlertPruneResult } {
+  try {
+    storage.setItem(key, value)
+    return { ok: true, prune: NO_PRUNE }
+  } catch (err) {
+    if (!isQuotaError(err)) return { ok: false, prune: NO_PRUNE }
+  }
+  const prune = trimAlertsToRetention()
+  try {
+    storage.setItem(key, value)
+    return { ok: true, prune }
+  } catch {
+    return { ok: false, prune }
+  }
+}
+
 function notifyChange(key: string) {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(STORAGE_EVENT, { detail: { key } }))
@@ -237,16 +302,18 @@ function saveInternal<T>(key: string, data: T[]): boolean {
   if (key === ALERTS_KEY) {
     const size = getStorageSize()
     if (size > STORAGE_QUOTA_BYTES * 0.9) {
+      const original = data as unknown as AlertPayload[]
       const cutoff = Date.now() - getRetentionDays() * 24 * 60 * 60 * 1000
-      const withinRetention = (data as AlertPayload[]).filter(
-        (a) => a.timestamp >= cutoff
-      )
-      data = capAlertsPerContract(withinRetention) as unknown as T[]
+      const withinRetention = original.filter((a) => a.timestamp >= cutoff)
+      const capped = capAlertsPerContract(withinRetention)
+      const prune = computePruneResult(original, capped)
+      data = capped as unknown as T[]
+      if (prune.prunedCount > 0) notifyAlertsPruned(prune)
     }
     return writeItem(storage, key, JSON.stringify(data))
   }
 
-  const ok = writeItem(storage, key, JSON.stringify(data))
+  const { ok, prune } = writeItemWithPrune(storage, key, JSON.stringify(data))
 
   const size = getStorageSize()
   if (size > STORAGE_QUOTA_BYTES * 0.9) {
@@ -675,6 +742,26 @@ export function onAlertsChange(cb: () => void): () => void {
 
 export function onContractsChange(cb: () => void): () => void {
   return subscribeToKey(CONTRACTS_KEY, cb)
+}
+
+// Subscribes to alert-pruning notifications. Fires whenever retention or quota
+// trimming drops alerts so the UI can surface a toast/banner. Returns an
+// unsubscribe fn.
+export function onAlertsPruned(
+  cb: (result: AlertPruneResult) => void
+): () => void {
+  if (typeof window === 'undefined') return () => {}
+
+  const handle = (event: Event) => {
+    const detail = (event as CustomEvent<AlertPruneResult>).detail
+    if (!detail) return
+    cb(detail)
+  }
+
+  window.addEventListener(ALERTS_PRUNED_EVENT, handle as EventListener)
+  return () => {
+    window.removeEventListener(ALERTS_PRUNED_EVENT, handle as EventListener)
+  }
 }
 
 // Counts alerts recorded since local midnight across all contracts.

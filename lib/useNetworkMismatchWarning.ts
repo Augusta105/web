@@ -20,11 +20,25 @@ export function useNetworkMismatchWarning(
   isConnected: boolean
 ) {
   const [networkWarning, setNetworkWarning] = useState<string | null>(null)
+  const [walletUnavailable, setWalletUnavailable] = useState(false)
 
   const readWarning = useCallback(async (): Promise<string | null> => {
     // null: extension not reachable. publicKey/network null: locked, not
     // approved, or network unreadable. Nothing to compare against in any case.
     const connection = await readFreighterConnection()
+    if (!connection.available || !connection.connected) {
+      // No extension or no connected wallet: nothing to compare against.
+      setNetworkWarning(null)
+      setWalletUnavailable(false)
+      return
+    }
+    try {
+      const walletNetwork = await getWalletNetwork()
+      setNetworkWarning(networkMismatchWarning(walletNetwork, network))
+      setWalletUnavailable(false)
+    } catch {
+      // Locked wallet, revoked permission, or other Freighter error: the
+      // network could not be determined, so surface it instead of staying silent.
     if (!connection?.publicKey || !connection.network) return null
     return networkMismatchWarning(connection.network, network)
   }, [network])
@@ -34,6 +48,7 @@ export function useNetworkMismatchWarning(
       setNetworkWarning(await readWarning())
     } catch {
       setNetworkWarning(null)
+      setWalletUnavailable(true)
     }
   }, [readWarning])
 
@@ -41,11 +56,28 @@ export function useNetworkMismatchWarning(
     let active = true
 
     async function run() {
+      const connection = await readFreighterConnection()
+      if (!connection.available || !connection.connected) {
+        if (active) {
+          setNetworkWarning(null)
+          setWalletUnavailable(false)
+        }
+        return
+      }
+      try {
+        const walletNetwork = await getWalletNetwork()
+        if (active) {
+          setNetworkWarning(networkMismatchWarning(walletNetwork, network))
+          setWalletUnavailable(false)
+        }
       try {
         const warning = await readWarning()
         if (active) setNetworkWarning(warning)
       } catch {
-        if (active) setNetworkWarning(null)
+        if (active) {
+          setNetworkWarning(null)
+          setWalletUnavailable(true)
+        }
       }
     }
 
@@ -76,7 +108,10 @@ export function useNetworkMismatchWarning(
     }
   }, [network, checkNetworkMismatch])
 
-  const clearNetworkWarning = useCallback(() => setNetworkWarning(null), [])
+  const clearNetworkWarning = useCallback(() => {
+    setNetworkWarning(null)
+    setWalletUnavailable(false)
+  }, [])
 
-  return { networkWarning, checkNetworkMismatch, clearNetworkWarning }
+  return { networkWarning, walletUnavailable, checkNetworkMismatch, clearNetworkWarning }
 }

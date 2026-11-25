@@ -93,7 +93,7 @@ export default function NewContractPage() {
 
   // Warns on mount, on network change, and after connecting, not only when the
   // network <select> changes.
-  const { networkWarning, checkNetworkMismatch, clearNetworkWarning } =
+  const { networkWarning, networkUnavailable, checkNetworkMismatch, clearNetworkWarning } =
     useNetworkMismatchWarning(network, isConnected)
 
   const hasNetworkMismatch = Boolean(networkWarning)
@@ -449,6 +449,8 @@ export default function NewContractPage() {
 
     sessionStorage.removeItem(DRAFT_KEY)
 
+    // Consumed by ContractsClient to highlight the newly created contract in
+    // the list. Keep this key in sync with that reader.
     try {
       sessionStorage.setItem('txwatch_last_created_contract', contract.id)
     } catch {
@@ -456,7 +458,13 @@ export default function NewContractPage() {
     }
 
     showToast(`Contract "${contract.label}" saved successfully!`, 'success')
+    // Clear any pending navigation from a previous save before scheduling a
+    // new one, so stale timeouts can't fire.
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
     saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null
       router.push(`/contracts/${contract.id}`)
     }, 1500)
 
@@ -690,6 +698,12 @@ export default function NewContractPage() {
               <option value="mainnet">Mainnet</option>
               <option value="futurenet">Futurenet</option>
             </select>
+            {networkWarning && <p className="text-xs text-amber-400 mt-1">{networkWarning}</p>}
+            {networkUnavailable && (
+              <p className="text-xs text-red-400 mt-1" data-testid="network-unavailable">
+                Could not verify your wallet&apos;s network. Make sure Freighter is unlocked and
+                connected, then try again.
+              </p>
             {networkWarning && (
               <FieldMessage kind="warning" className="mt-1">
                 {networkWarning}
