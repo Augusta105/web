@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto'
 import {
   DEFAULT_SIGNATURE_TOLERANCE_SECONDS,
+  finishWebhookSecretRotation,
   generateWebhookSecret,
   parseSignatureTimestamp,
   parseSignatureHeader,
@@ -92,6 +93,83 @@ describe('verifyWebhookSignature', () => {
     await expect(
       verifyWebhookSignature('old-secret', BODY, header, { now: T })
     ).resolves.toMatchObject({ valid: true })
+  })
+
+  it('accepts the current secret when the header carries two v1 entries', async () => {
+    const header = await signWebhookPayload(SECRET, BODY, T, {
+      previousSecret: 'old-secret',
+    })
+    await expect(
+      verifyWebhookSignature(SECRET, BODY, header, { now: T })
+    ).resolves.toEqual({ valid: true, timestamp: T })
+  })
+})
+
+describe('dual-secret signing during the rotation grace window', () => {
+  const PREVIOUS = 'whsec_previous'
+  const GRACE_EXPIRES_AT = T + 24 * 60 * 60
+
+  it('emits two v1= entries while the grace window is open', async () => {
+    const header = await signWebhookPayload(SECRET, BODY, T, {
+      previousSecret: PREVIOUS,
+      previousSecretExpiresAt: GRACE_EXPIRES_AT,
+      now: T,
+    })
+    expect(header.match(/v1=[0-9a-f]{64}/g)).toHaveLength(2)
+    expect(header).toMatch(new RegExp(`^t=${T},v1=[0-9a-f]{64},v1=[0-9a-f]{64}$`))
+  })
+
+  it('verifies against both the current and the previous secret', async () => {
+    const header = await signWebhookPayload(SECRET, BODY, T, {
+      previousSecret: PREVIOUS,
+      previousSecretExpiresAt: GRACE_EXPIRES_AT,
+      now: T,
+    })
+    await expect(
+      verifyWebhookSignature(SECRET, BODY, header, { now: T + 10 })
+    ).resolves.toEqual({ valid: true, timestamp: T })
+    await expect(
+      verifyWebhookSignature(PREVIOUS, BODY, header, { now: T + 10 })
+    ).resolves.toEqual({ valid: true, timestamp: T })
+  })
+
+  it('signs with only the current secret once the grace window has expired', async () => {
+    const header = await signWebhookPayload(SECRET, BODY, T, {
+      previousSecret: PREVIOUS,
+      previousSecretExpiresAt: GRACE_EXPIRES_AT,
+      now: GRACE_EXPIRES_AT,
+    })
+    expect(header.match(/v1=/g)).toHaveLength(1)
+    await expect(
+      verifyWebhookSignature(PREVIOUS, BODY, header, { now: T })
+    ).resolves.toEqual({ valid: false, reason: 'mismatch' })
+  })
+
+  it('signs with only the current secret when no expiry is configured', async () => {
+    const header = await signWebhookPayload(SECRET, BODY, T, {
+      previousSecret: PREVIOUS,
+    })
+    expect(header.match(/v1=/g)).toHaveLength(1)
+  })
+
+  it('finish rotation clears the previous secret so only the current one signs', async () => {
+    const rotated = finishWebhookSecretRotation({
+      secret: SECRET,
+      previousSecret: PREVIOUS,
+      previousSecretExpiresAt: GRACE_EXPIRES_AT,
+    })
+    expect(rotated.previousSecret).toBeUndefined()
+    expect(rotated.previousSecretExpiresAt).toBeUndefined()
+
+    const header = await signWebhookPayload(rotated.secret, BODY, T, {
+      previousSecret: rotated.previousSecret,
+      previousSecretExpiresAt: rotated.previousSecretExpiresAt,
+      now: T,
+    })
+    expect(header.match(/v1=/g)).toHaveLength(1)
+    await expect(
+      verifyWebhookSignature(PREVIOUS, BODY, header, { now: T })
+    ).resolves.toEqual({ valid: false, reason: 'mismatch' })
   })
 
   it.each([

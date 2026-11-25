@@ -299,6 +299,62 @@ export function getContract(id: string): WatchedContract | undefined {
   return getContracts().find((c) => c.id === id)
 }
 
+export const WEBHOOK_SECRET_GRACE_MS = 24 * 60 * 60 * 1000
+
+// Returns the previous webhook secret while it is still inside its grace
+// window. Expired secrets are ignored (and treated as absent).
+export function getPreviousWebhookSecret(
+  contract: WatchedContract | undefined
+): string | undefined {
+  if (!contract || !contract.webhook_secret_previous) return undefined
+  const expiresAt = contract.webhook_secret_previous_expires_at
+  if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)) {
+    return undefined
+  }
+  if (Date.now() >= expiresAt) return undefined
+  return contract.webhook_secret_previous
+}
+
+// Returns the grace-window expiry for the previous secret, or undefined when
+// there is no active previous secret.
+export function getWebhookSecretGraceExpiry(
+  contract: WatchedContract | undefined
+): number | undefined {
+  if (!getPreviousWebhookSecret(contract)) return undefined
+  return contract?.webhook_secret_previous_expires_at
+}
+
+// Rotates a contract's webhook secret: the current secret becomes the previous
+// secret (valid for WEBHOOK_SECRET_GRACE_MS) and the new secret takes over.
+export function rotateWebhookSecret(
+  contractId: string,
+  newSecret: string,
+  graceMs: number = WEBHOOK_SECRET_GRACE_MS
+): boolean {
+  const contract = getContract(contractId)
+  if (!contract) return false
+  const now = Date.now()
+  const updated: WatchedContract = {
+    ...contract,
+    webhook_secret: newSecret,
+    webhook_secret_previous: contract.webhook_secret,
+    webhook_secret_previous_expires_at: now + graceMs,
+  }
+  return saveContract(updated)
+}
+
+// Ends the grace period early by dropping the previous secret.
+export function finishWebhookSecretRotation(contractId: string): boolean {
+  const contract = getContract(contractId)
+  if (!contract) return false
+  const updated: WatchedContract = {
+    ...contract,
+    webhook_secret_previous: undefined,
+    webhook_secret_previous_expires_at: undefined,
+  }
+  return saveContract(updated)
+}
+
 export function getNetworkDistribution(): Record<Network, number> {
   return getContracts().reduce(
     (counts, contract) => {

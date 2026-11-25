@@ -7,6 +7,25 @@ import type { AlertRule, Network } from '@/types'
 
 type TestStatus = 'idle' | 'sending' | 'ok' | 'error'
 
+/** HTTP statuses the proxy uses when it blocks a request before delivery. */
+const PROXY_BLOCK_STATUSES = new Set([403, 429])
+
+/**
+ * Builds the failure message for a rejected test delivery, preferring the
+ * proxy's explanation over the bare HTTP status.
+ */
+function buildFailureMessage(res: {
+  status: number
+  error?: string
+}): string {
+  const reason = res.error?.trim()
+  if (!reason) {
+    return `Delivery failed with HTTP status ${res.status}.`
+  }
+  if (PROXY_BLOCK_STATUSES.has(res.status)) {
+    return `Blocked by TxWatch: ${reason}`
+  }
+  return `Receiver answered HTTP ${res.status}: ${reason}`
 /**
  * Message for a failed delivery. A 3xx is never followed by the proxy, so
  * when the receiver says where it moved, point the user at that URL (#399).
@@ -93,6 +112,7 @@ export default function WebhookTestButton({
         setMessage(`Test webhook delivered (HTTP ${res.status}).`)
       } else {
         setStatus('error')
+        setMessage(buildFailureMessage(res))
         setMessage(failureMessage(res))
       }
     } catch (err) {
