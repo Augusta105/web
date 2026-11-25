@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto'
 import {
   DEFAULT_SIGNATURE_TOLERANCE_SECONDS,
   generateWebhookSecret,
+  parseSignatureTimestamp,
   parseSignatureHeader,
   signWebhookPayload,
   verifyWebhookSignature,
@@ -107,6 +108,23 @@ describe('verifyWebhookSignature', () => {
   })
 })
 
+describe('parseSignatureTimestamp', () => {
+  it('returns the t= of a header built by signWebhookPayload', async () => {
+    const header = await signWebhookPayload('whsec_x', '{}', 1700000000)
+    expect(parseSignatureTimestamp(header)).toBe(1700000000)
+  })
+
+  it.each([
+    '',
+    `sha256=${'a'.repeat(64)}`,
+    `t=abc,v1=${'a'.repeat(64)}`,
+    `t=1700000000,v1=${'a'.repeat(63)}`,
+    `t=1700000000,v1=${'A'.repeat(64)}`,
+    `t=1700000000,v1=${'a'.repeat(64)},v1=${'b'.repeat(64)}`,
+    `v1=${'a'.repeat(64)},t=1700000000`,
+    `t=1700000000000000,v1=${'a'.repeat(64)}`,
+  ])('returns null for %j', (header) => {
+    expect(parseSignatureTimestamp(header)).toBeNull()
 describe('parseSignatureHeader', () => {
   const MAC = 'a'.repeat(64)
 

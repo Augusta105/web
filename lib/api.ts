@@ -131,6 +131,11 @@ export interface TestWebhookResult {
   bodySnippet?: string | null
   /** Why the delivery could not be made (e.g. blocked URL, timeout). */
   error?: string
+  /**
+   * Where a 3xx receiver redirects to (origin and path only). Redirects are
+   * never followed, so this tells the user which URL to configure instead.
+   */
+  location?: string
 }
 
 /**
@@ -271,14 +276,36 @@ function canonicalJson(value: unknown): string {
 }
 
 /**
+ * How far a test payload's `timestamp` (ms) may be from server time before
+ * the proxy refuses to forward it (#401): 5 minutes, the same window
+ * receivers apply to the signature's `t=`.
+ */
+export const TEST_PAYLOAD_MAX_SKEW_MS = 5 * 60 * 1000
+
+export interface ParseCanonicalTestPayloadOptions {
+  /** Current time in ms; injectable for tests. Defaults to Date.now(). */
+  now?: number
+  /** Allowed distance from `now`, in ms. Defaults to 5 minutes. */
+  maxSkewMs?: number
+}
+
+/**
  * Parses a caller-supplied test payload body and returns it only if it is
  * exactly what buildTestWebhookPayload would produce for its own contract,
  * network, rule, label, timestamp and transaction hash. The proxy uses this
  * so it forwards dashboard-built test payloads verbatim (keeping the
  * browser's signature valid) without becoming a relay for arbitrary
- * content (#261). Returns null for anything else.
+ * content (#261). Payloads dated more than `maxSkewMs` before or after `now`
+ * are refused too, so a captured body cannot be replayed through the proxy
+ * indefinitely (#401). Returns null for anything else.
  */
-export function parseCanonicalTestPayload(body: string): AlertPayload | null {
+export function parseCanonicalTestPayload(
+  body: string,
+  {
+    now = Date.now(),
+    maxSkewMs = TEST_PAYLOAD_MAX_SKEW_MS,
+  }: ParseCanonicalTestPayloadOptions = {}
+): AlertPayload | null {
   let p: Record<string, unknown>
   try {
     p = JSON.parse(body)
@@ -298,6 +325,7 @@ export function parseCanonicalTestPayload(body: string): AlertPayload | null {
     return null
   if (typeof p.timestamp !== 'number' || !Number.isFinite(p.timestamp))
     return null
+  if (Math.abs(now - p.timestamp) > maxSkewMs) return null
   if (
     typeof p.transaction_hash !== 'string' ||
     !/^[0-9a-f]{64}$/.test(p.transaction_hash)
@@ -427,6 +455,7 @@ export async function sendTestWebhook(
         durationMs?: number
         bodySnippet?: string | null
         error?: string
+        location?: unknown
       }
       return {
         status: typeof data.status === 'number' ? data.status : proxyRes.status,
@@ -434,6 +463,9 @@ export async function sendTestWebhook(
         durationMs: data.durationMs,
         bodySnippet: data.bodySnippet ?? null,
         ...(data.error ? { error: data.error } : {}),
+        ...(typeof data.location === 'string' && data.location
+          ? { location: data.location }
+          : {}),
       }
     }
 

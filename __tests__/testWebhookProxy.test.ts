@@ -81,6 +81,63 @@ describe('POST /api/test-webhook', () => {
     expect(headers[SIGNATURE_HEADER]).toBe(signature)
   })
 
+  describe('timestamp window (#401)', () => {
+    const MIN = 60_000
+
+    it.each([
+      ['six minutes old', -6 * MIN],
+      ['six minutes ahead', 6 * MIN],
+      ['years ahead', 3 * 365 * 24 * 60 * MIN],
+      ['from 1970', -Date.now() + 42],
+    ])('refuses a payload %s', async (_label, offset) => {
+      const res = await POST(
+        request({
+          ...valid,
+          body: testBody({ timestamp: Date.now() + offset }),
+        })
+      )
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toMatch(/server time/)
+      expect(deliverWebhook).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['four minutes old', -4 * MIN],
+      ['four minutes ahead', 4 * MIN],
+    ])('accepts a payload %s', async (_label, offset) => {
+      const res = await POST(
+        request({
+          ...valid,
+          body: testBody({ timestamp: Date.now() + offset }),
+        })
+      )
+      expect(res.status).toBe(200)
+    })
+
+    it('refuses a fresh body whose signature t= is stale', async () => {
+      const body = testBody()
+      const t = Math.floor(Date.now() / 1000) - 10 * 60
+      const signature = await signWebhookPayload('whsec_x', body, t)
+      const res = await POST(request({ url: valid.url, body, signature }))
+      expect(res.status).toBe(400)
+      expect(deliverWebhook).not.toHaveBeenCalled()
+    })
+
+    it('refuses a signature t= dated in the future', async () => {
+      const body = testBody()
+      const t = Math.floor(Date.now() / 1000) + 10 * 60
+      const signature = await signWebhookPayload('whsec_x', body, t)
+      const res = await POST(request({ url: valid.url, body, signature }))
+      expect(res.status).toBe(400)
+    })
+
+    it('refuses the legacy sha256= signature format', async () => {
+      const res = await POST(
+        request({ ...valid, signature: `sha256=${'a'.repeat(64)}` })
+      )
+      expect(res.status).toBe(400)
+      expect(deliverWebhook).not.toHaveBeenCalled()
+    })
   it.each([
     ['the legacy sha256= form', `sha256=${'a'.repeat(64)}`],
     ['a missing timestamp', `v1=${'a'.repeat(64)}`],
