@@ -50,6 +50,12 @@ function formatXlm(value: number): string {
   })
 }
 
+/** Plain decimal string (no exponent notation) with trailing zeros trimmed. */
+function plainDecimal(value: number): string {
+  const fixed = value.toFixed(MAX_XLM_DECIMALS)
+  return fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed
+}
+
 function parseFunctionNames(raw: string): string[] {
   return raw
     .split(',')
@@ -305,7 +311,7 @@ export default function RuleBuilder({
     const rule = rules[index]
     setDraftType(rule.type)
     setThresholdText(
-      rule.type === 'LargeTransfer' ? String(rule.threshold_xlm) : ''
+      rule.type === 'LargeTransfer' ? plainDecimal(rule.threshold_xlm) : ''
     )
     setAssetText(rule.type === 'LargeTransfer' ? rule.asset ?? 'XLM' : 'XLM')
     setDecimalsText(
