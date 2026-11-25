@@ -36,6 +36,14 @@ export interface WalletChangeDetail {
  * degrades to same-tab CustomEvents only.
  */
 let walletChannel: BroadcastChannel | null = null
+let lastKnownPublicKey: string | null | undefined
+
+/**
+ * Number of live subscribers sharing `walletChannel`. The channel is only
+ * closed once this drops to zero, so one component unmounting does not tear
+ * the port out from under the others.
+ */
+let walletChannelSubscribers = 0
 
 function getWalletChannel(): BroadcastChannel | null {
   if (typeof BroadcastChannel === 'undefined') return null
@@ -84,6 +92,7 @@ export function broadcastWalletChange(
           network: detail.network ?? null,
           networkPassphrase: detail.networkPassphrase ?? null,
         }
+  lastKnownPublicKey = publicKey
 
   // Never persist the key; just make sure no stale copy survives.
   clearPersistedPublicKey()
@@ -107,6 +116,19 @@ export function broadcastWalletChange(
   }
 }
 
+/**
+ * Broadcast only when the observed wallet key has changed. Initial probes
+ * across multiple consumers can all resolve with the same key.
+ */
+export function broadcastWalletChangeIfChanged(publicKey: string | null): void {
+  if (lastKnownPublicKey === undefined) {
+    lastKnownPublicKey = publicKey
+    return
+  }
+  if (lastKnownPublicKey === publicKey) return
+  broadcastWalletChange(publicKey)
+}
+
 // Remove any value persisted by older builds as soon as this module loads.
 if (typeof window !== 'undefined') {
   clearPersistedPublicKey()
@@ -117,8 +139,9 @@ if (typeof window !== 'undefined') {
  * returned straight from a `useEffect`.
  *
  * Listens to the same-tab CustomEvent and, when available, to the cross-tab
- * `BroadcastChannel`. The channel is closed on unsubscribe so a torn-down
- * subscriber does not keep the port (and its message queue) alive.
+ * `BroadcastChannel`. The shared channel is reference-counted: it is closed
+ * only when the last subscriber unsubscribes, so a torn-down component does
+ * not cut off the remaining listeners.
  */
 export function subscribeWallet(
   listener: (detail: WalletChangeDetail) => void
@@ -132,6 +155,8 @@ export function subscribeWallet(
       network: detail ? detail.network ?? null : null,
       networkPassphrase: detail ? detail.networkPassphrase ?? null : null,
     })
+    lastKnownPublicKey = detail ? detail.publicKey : null
+    listener(detail ? detail.publicKey : null)
   }
 
   window.addEventListener(WALLET_EVENT, handler)
@@ -144,22 +169,33 @@ export function subscribeWallet(
       network: detail ? detail.network ?? null : null,
       networkPassphrase: detail ? detail.networkPassphrase ?? null : null,
     })
+    lastKnownPublicKey = detail ? (detail.publicKey ?? null) : null
+    listener(detail ? (detail.publicKey ?? null) : null)
   }
 
   if (channel) {
     channel.addEventListener('message', channelHandler)
+    walletChannelSubscribers += 1
   }
 
+  let unsubscribed = false
+
   return () => {
+    if (unsubscribed) return
+    unsubscribed = true
+
     window.removeEventListener(WALLET_EVENT, handler)
     if (channel) {
       channel.removeEventListener('message', channelHandler)
-      try {
-        channel.close()
-      } catch {
-        // Already closed.
+      walletChannelSubscribers = Math.max(0, walletChannelSubscribers - 1)
+      if (walletChannelSubscribers === 0) {
+        try {
+          channel.close()
+        } catch {
+          // Already closed.
+        }
+        if (walletChannel === channel) walletChannel = null
       }
-      if (walletChannel === channel) walletChannel = null
     }
   }
 }

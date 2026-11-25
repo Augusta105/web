@@ -2,6 +2,8 @@ import { createHmac } from 'node:crypto'
 import {
   DEFAULT_SIGNATURE_TOLERANCE_SECONDS,
   generateWebhookSecret,
+  parseSignatureTimestamp,
+  parseSignatureHeader,
   signWebhookPayload,
   verifyWebhookSignature,
 } from '../lib/webhookSignature'
@@ -103,5 +105,55 @@ describe('verifyWebhookSignature', () => {
     await expect(
       verifyWebhookSignature(SECRET, BODY, header, { now: T })
     ).resolves.toEqual({ valid: false, reason: 'malformed' })
+  })
+})
+
+describe('parseSignatureTimestamp', () => {
+  it('returns the t= of a header built by signWebhookPayload', async () => {
+    const header = await signWebhookPayload('whsec_x', '{}', 1700000000)
+    expect(parseSignatureTimestamp(header)).toBe(1700000000)
+  })
+
+  it.each([
+    '',
+    `sha256=${'a'.repeat(64)}`,
+    `t=abc,v1=${'a'.repeat(64)}`,
+    `t=1700000000,v1=${'a'.repeat(63)}`,
+    `t=1700000000,v1=${'A'.repeat(64)}`,
+    `t=1700000000,v1=${'a'.repeat(64)},v1=${'b'.repeat(64)}`,
+    `v1=${'a'.repeat(64)},t=1700000000`,
+    `t=1700000000000000,v1=${'a'.repeat(64)}`,
+  ])('returns null for %j', (header) => {
+    expect(parseSignatureTimestamp(header)).toBeNull()
+describe('parseSignatureHeader', () => {
+  const MAC = 'a'.repeat(64)
+
+  it('parses the timestamp and every v1 entry', () => {
+    expect(
+      parseSignatureHeader(`t=${T},v1=${MAC},v1=${'b'.repeat(64)}`)
+    ).toEqual({
+      timestamp: T,
+      signatures: [expect.any(Uint8Array), expect.any(Uint8Array)],
+    })
+  })
+
+  it.each([
+    ['null', null],
+    ['an empty header', ''],
+    ['the legacy sha256= form', `sha256=${MAC}`],
+    ['no timestamp', `v1=${MAC}`],
+    ['a non-numeric timestamp', `t=12x,v1=${MAC}`],
+    ['no v1 entry', `t=${T}`],
+    ['a MAC that is not 32 bytes', `t=${T},v1=${'a'.repeat(62)}`],
+  ])('returns null for %s', (_label, header) => {
+    expect(parseSignatureHeader(header)).toBeNull()
+  })
+
+  it('agrees with verifyWebhookSignature on well-formed headers', async () => {
+    const header = await signWebhookPayload(SECRET, BODY, T)
+    expect(parseSignatureHeader(header)?.timestamp).toBe(T)
+    await expect(
+      verifyWebhookSignature(SECRET, BODY, header, { now: T })
+    ).resolves.toEqual({ valid: true, timestamp: T })
   })
 })

@@ -7,6 +7,25 @@ import type { AlertRule, Network } from '@/types'
 
 type TestStatus = 'idle' | 'sending' | 'ok' | 'error'
 
+/**
+ * Message for a failed delivery. A 3xx is never followed by the proxy, so
+ * when the receiver says where it moved, point the user at that URL (#399).
+ */
+export function failureMessage(res: {
+  status: number
+  location?: string
+  error?: string
+}): string {
+  // The proxy's fixed message (e.g. "The receiver refused the connection")
+  // says more than the status of a delivery that never reached a receiver.
+  if (res.error) return `${res.error}.`
+  const base = `Delivery failed with HTTP status ${res.status}.`
+  if (res.status >= 300 && res.status < 400 && res.location) {
+    return `${base} Receiver redirects to ${res.location} — update the webhook URL.`
+  }
+  return base
+}
+
 interface WebhookTestButtonProps {
   /** Receiver URL to deliver the test payload to. */
   url: string
@@ -74,7 +93,7 @@ export default function WebhookTestButton({
         setMessage(`Test webhook delivered (HTTP ${res.status}).`)
       } else {
         setStatus('error')
-        setMessage(`Delivery failed with HTTP status ${res.status}.`)
+        setMessage(failureMessage(res))
       }
     } catch (err) {
       if (controller.signal.aborted) return
@@ -98,7 +117,7 @@ export default function WebhookTestButton({
       {message && (
         <p
           role="status"
-          className={`text-xs ${status === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}
+          className={`text-xs break-words ${status === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}
         >
           {message}
         </p>
