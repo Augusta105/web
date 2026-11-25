@@ -4,6 +4,11 @@ import WebhookLog, { toWebhookEntry } from '@/components/WebhookLog'
 import { AlertPayload } from '@/types'
 import { formatRelativeTime } from '@/lib/format'
 
+let mockSearch = ''
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}))
+
 const explorerTxUrl = vi.fn(
   (network: string, hash: string) =>
     `https://stellar.expert/explorer/${network}/tx/${hash}`
@@ -33,6 +38,7 @@ const baseAlert: AlertPayload = {
 describe('WebhookLog', () => {
   beforeEach(() => {
     explorerTxUrl.mockClear()
+    mockSearch = ''
   })
 
   afterEach(() => {
@@ -206,6 +212,36 @@ describe('WebhookLog', () => {
     expect(screen.getByText(updatedLabel)).toBeInTheDocument()
   })
 
+  it('drops a 24h-range alert once the clock advances past the window boundary', async () => {
+    vi.useFakeTimers()
+    // t=0: "now" is T. The alert is 23 h 59 min old — just inside the 24h window.
+    const alertAge = 23 * 60 * 60 * 1000 + 59 * 60 * 1000 // 23 h 59 min in ms
+    const baseTime = Date.now()
+    vi.setSystemTime(baseTime)
+
+    const recentAlert: AlertPayload = {
+      ...baseAlert,
+      timestamp: baseTime - alertAge,
+    }
+
+    render(<WebhookLog alerts={[recentAlert]} network="testnet" />)
+
+    // Switch to the 24h range filter
+    fireEvent.click(screen.getByRole('button', { name: /24h/i }))
+    expect(
+      screen.queryByText('No alerts match the selected filters.')
+    ).not.toBeInTheDocument()
+
+    // Advance the clock by 2 minutes so the alert is now 24 h 1 min old.
+    act(() => {
+      vi.advanceTimersByTime(2 * 60 * 1000)
+    })
+
+    expect(
+      screen.getByText('No alerts match the selected filters.')
+    ).toBeInTheDocument()
+  })
+
   it('does not create a per-component interval', () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
     render(<WebhookLog alerts={[baseAlert]} network="testnet" />)
@@ -235,6 +271,17 @@ describe('WebhookLog', () => {
       expect(screen.getByText('26–30 of 30')).toBeInTheDocument()
       expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
     })
+  })
+
+  it('honors ?page= on initial render (issue #449)', () => {
+    mockSearch = 'page=2'
+    const manyAlerts: AlertPayload[] = Array.from({ length: 30 }, (_, i) => ({
+      ...baseAlert,
+      transaction_hash: `hash_${String(i).padStart(3, '0')}`,
+      timestamp: baseAlert.timestamp + i * 1000,
+    }))
+    render(<WebhookLog alerts={manyAlerts} network="testnet" />)
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
   })
 
   describe('alert CSV export (issue #232)', () => {

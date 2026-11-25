@@ -214,6 +214,117 @@ describe('parseImport', () => {
       functions: ['upgrade'],
     })
   })
+
+  it('validates restored alerts, drops unknown fields and counts skipped', () => {
+    const alert = {
+      label: 'A',
+      contract_id: CID,
+      network: 'testnet',
+      rule_triggered: 'AnyTransaction',
+      transaction_hash: 'abc',
+      timestamp: 1,
+      horizon_link: 'https://h',
+      extra: 'x',
+    }
+    const { transaction_hash: _omit, ...missingHash } = alert
+    const r = parseImport(
+      JSON.stringify({
+        version: 2,
+        contracts: [],
+        alerts: [alert, missingHash],
+      })
+    )
+    expect(r.alerts).toHaveLength(1)
+    expect(r.alerts![0]).not.toHaveProperty('extra')
+    expect(r.skippedAlerts).toBe(1)
+  })
+})
+
+describe('LargeTransfer threshold validation', () => {
+  const withThreshold = (t: unknown) => ({
+    ...good,
+    rules: [{ type: 'LargeTransfer', threshold_xlm: t }],
+  })
+
+  it.each([0, -1, 1e12, 0.123456789])('rejects %s', (t) => {
+    const result = validateContractEntry(withThreshold(t))
+    expect(typeof result).toBe('string')
+    expect(result).toMatch(/^invalid threshold_xlm: /)
+  })
+
+  it('reports specific reasons', () => {
+    expect(validateContractEntry(withThreshold(0))).toContain('greater than 0')
+    expect(validateContractEntry(withThreshold(1e12))).toContain(
+      'cannot exceed'
+    )
+    expect(validateContractEntry(withThreshold(0.123456789))).toContain(
+      'decimal places'
+    )
+    expect(validateContractEntry(withThreshold('5'))).toBe(
+      'threshold_xlm must be a number'
+    )
+  })
+
+  it('accepts valid thresholds', () => {
+    const result = validateContractEntry(withThreshold(0.0000001))
+    expect(typeof result).toBe('object')
+    expect(validateContractEntry(withThreshold(50_000_000_000))).toHaveProperty(
+      'rules'
+    )
+  })
+})
+
+describe('duplicates within one import file', () => {
+  it('reports later duplicates as errors and keeps the first', () => {
+    const { id: _id, ...noId } = good
+    const result = parseImport(
+      JSON.stringify([noId, { ...noId, label: 'Again' }])
+    )
+    expect(result.contracts).toHaveLength(1)
+    expect(result.contracts[0].label).toBe('Alpha')
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].index).toBe(1)
+    expect(result.errors[0].message).toMatch(/duplicate/)
+  })
+
+  it('generates a non-colon-joined id when none is provided', () => {
+    const { id: _id, ...noId } = good
+    const { contracts } = parseImport(JSON.stringify([noId]))
+    expect(contracts[0].id).not.toBe(`${CID}:testnet`)
+    expect(contracts[0].id.length).toBeGreaterThan(0)
+  })
+
+  it('allows the same contract_id on different networks', () => {
+    const { id: _id, ...noId } = good
+    const result = parseImport(
+      JSON.stringify([noId, { ...noId, network: 'futurenet' }])
+    )
+    expect(result.contracts).toHaveLength(2)
+    expect(new Set(result.contracts.map((c) => c.id)).size).toBe(2)
+  })
+})
+
+describe('label rules', () => {
+  it('trims labels', () => {
+    const result = validateContractEntry({ ...good, label: '  Alpha  ' })
+    expect(result).toHaveProperty('label', 'Alpha')
+  })
+
+  it('rejects labels over the max length and accepts exactly the max', () => {
+    expect(validateContractEntry({ ...good, label: 'a'.repeat(101) })).toBe(
+      'label must be 100 characters or less'
+    )
+    expect(
+      validateContractEntry({ ...good, label: 'a'.repeat(100) })
+    ).toHaveProperty('label')
+  })
+
+  it('falls back to contract_id for a blank label', () => {
+    expect(validateContractEntry({ ...good, label: '   ' })).toHaveProperty(
+      'label',
+      CID
+    )
+  })
 })
 
 describe('webhook format and headers on import (#408, #409)', () => {

@@ -5,12 +5,15 @@ import {
   describeRule,
   isApiConfigured,
   joinUrl,
+  parseCanonicalTestPayload,
   removeContract,
   sendTestWebhook,
+  TEST_PAYLOAD_MAX_SKEW_MS,
   TEST_TX_HASH,
 } from '@/lib/api'
 import { horizonUrl } from '@/lib/stellar'
 import { signWebhookPayload } from '@/lib/webhookSignature'
+import type { AlertRule } from '@/types'
 
 global.fetch = vi.fn()
 
@@ -68,6 +71,22 @@ describe('apiFetch', () => {
 })
 
 describe('buildTestWebhookPayload', () => {
+  it('simulates the chosen AdminFunctionCalled function when allowed (#447)', () => {
+    const rule: AlertRule = {
+      type: 'AdminFunctionCalled',
+      function_names: ['set_admin', 'upgrade'],
+    }
+    const base = { contractId: 'CBCDEF', rule, timestamp: 1 }
+    expect(
+      buildTestWebhookPayload({ ...base, functionName: 'upgrade' })
+        .function_name
+    ).toBe('upgrade')
+    expect(
+      buildTestWebhookPayload({ ...base, functionName: 'evil' }).function_name
+    ).toBe('set_admin')
+    expect(buildTestWebhookPayload(base).function_name).toBe('set_admin')
+  })
+
   it('defaults to AnyTransaction with a well-formed hash and horizon link', () => {
     const payload = buildTestWebhookPayload({
       contractId: 'CBCDEF',
@@ -191,12 +210,14 @@ describe('sendTestWebhook', () => {
       })
       // The receiver's status comes from the proxy's JSON, not its HTTP code.
       expect(result).toMatchObject({ status: 204, ok: true })
+      expect(result).not.toHaveProperty('location')
     } finally {
       vi.unstubAllEnvs()
     }
   })
 
   it('sends a Slack body with its alert and only allow-listed headers via the proxy', async () => {
+  it('passes the redirect target reported by the proxy through', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     try {
       ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -221,6 +242,37 @@ describe('sendTestWebhook', () => {
       })
       expect(Object.keys(JSON.parse(sent.body))).toEqual(['text'])
       expect(sent.headers).toEqual({ Authorization: 'Bearer test-token' })
+        json: async () => ({
+          status: 301,
+          ok: false,
+          location: 'https://example.com/hook/',
+        }),
+      })
+      const result = await sendTestWebhook('https://example.com/hook', {
+        contractId: 'CBCDEF',
+      })
+      expect(result).toMatchObject({
+        status: 301,
+        ok: false,
+        location: 'https://example.com/hook/',
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('ignores a non-string location from the proxy', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    try {
+      ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 302, ok: false, location: 42 }),
+      })
+      const result = await sendTestWebhook('https://example.com/hook', {
+        contractId: 'CBCDEF',
+      })
+      expect(result).not.toHaveProperty('location')
     } finally {
       vi.unstubAllEnvs()
     }
@@ -478,5 +530,45 @@ describe('removeContract', () => {
     expect(url).toBe('http://api/contracts/abc123')
     expect(url).not.toContain('//contracts')
     expect((init as RequestInit).method).toBe('DELETE')
+  })
+})
+
+describe('parseCanonicalTestPayload timestamp window (#401)', () => {
+  const NOW = 1_700_000_000_000
+  const body = (timestamp: number) =>
+    JSON.stringify(
+      buildTestWebhookPayload({
+        contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+        timestamp,
+      })
+    )
+
+  it('accepts a payload within five minutes of now', () => {
+    expect(parseCanonicalTestPayload(body(NOW), { now: NOW })).not.toBeNull()
+    expect(
+      parseCanonicalTestPayload(body(NOW - TEST_PAYLOAD_MAX_SKEW_MS), {
+        now: NOW,
+      })
+    ).not.toBeNull()
+    expect(
+      parseCanonicalTestPayload(body(NOW + TEST_PAYLOAD_MAX_SKEW_MS), {
+        now: NOW,
+      })
+    ).not.toBeNull()
+  })
+
+  it.each([
+    ['just past the window', NOW - TEST_PAYLOAD_MAX_SKEW_MS - 1],
+    ['just ahead of the window', NOW + TEST_PAYLOAD_MAX_SKEW_MS + 1],
+    ['a year ahead', NOW + 365 * 24 * 3600 * 1000],
+    ['the epoch', 0],
+  ])('rejects a payload %s', (_label, timestamp) => {
+    expect(parseCanonicalTestPayload(body(timestamp), { now: NOW })).toBeNull()
+  })
+
+  it('honours a custom window', () => {
+    expect(
+      parseCanonicalTestPayload(body(NOW - 2000), { now: NOW, maxSkewMs: 1000 })
+    ).toBeNull()
   })
 })

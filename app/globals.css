@@ -35,3 +35,15 @@ body {
     text-wrap: balance;
   }
 }
+
+/*
+ * #537: many inputs set `focus:outline-none`, which removes the browser focus
+ * indicator. This restores one consistent, visible keyboard-focus ring for
+ * every interactive element (WCAG 2.2 AA 2.4.7 / 2.4.11). It only applies to
+ * keyboard focus (:focus-visible), so mouse clicks are unaffected, and it comes
+ * after the Tailwind utilities so it wins over `focus:outline-none`.
+ */
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}

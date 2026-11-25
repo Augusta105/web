@@ -14,12 +14,30 @@ import {
 } from '@/types'
 
 export interface WebhookEntry {
+import { truncateId, explorerTxUrl } from '@/lib/stellar'
+import { formatDateTime } from '@/lib/format'
+import { explorerContractUrl } from '@/lib/explorer'
+import Modal from '@/components/Modal'
+import { AlertPayload, Network } from '@/types'
+
+export interface WebhookEntry {
+  id: string;
+  timestamp: string;
+  event: string;
+  contractAddress?: string;
+  status: 'success' | 'failed' | 'pending';
+  amount?: string;
+  asset?: string;
+  txHash?: string;
+  payload?: Record<string, unknown>;
+  isTest?: boolean;
   id: string
   timestamp: string
   event: string
   contractAddress?: string
   /** Delivery outcome. Absent when the source does not report one. */
   status?: DeliveryStatus
+  status: 'success' | 'failed' | 'pending'
   amount?: string
   asset?: string
   txHash?: string
@@ -34,6 +52,7 @@ export interface WebhookLogCardProps {
 }
 
 const STATUS_STYLES: Record<DeliveryStatus, string> = {
+const STATUS_STYLES: Record<WebhookEntry['status'], string> = {
   success:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
@@ -55,12 +74,15 @@ function normalizeEntry(props: WebhookLogCardProps): WebhookEntry {
       asset: 'XLM',
       txHash: a.transaction_hash,
       payload: a as unknown as Record<string, unknown>,
+      isTest: a.is_test === true,
+    };
     }
   }
   return {
     id: '',
     timestamp: new Date().toISOString(),
     event: 'Unknown',
+    status: 'success',
   }
 }
 
@@ -73,6 +95,13 @@ export function WebhookLogCard({
   const [isOpen, setIsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  const data = normalizeEntry({ alert, entry });
+  const payload = data.payload ?? data;
+  const json = JSON.stringify(payload, null, 2);
+  const isTest =
+    data.isTest === true ||
+    alert?.is_test === true ||
+    (data.payload as Record<string, unknown> | undefined)?.is_test === true;
   const data = normalizeEntry({ alert, entry })
   const payload = data.payload ?? data
   const json = JSON.stringify(payload, null, 2)
@@ -114,6 +143,8 @@ export function WebhookLogCard({
     (data.contractAddress
       ? explorerContractUrl(network, data.contractAddress)
       : null)
+      : null) ??
+    undefined
 
   return (
     <>
@@ -126,8 +157,16 @@ export function WebhookLogCard({
         aria-label={`Webhook event ${data.event} at ${data.timestamp}. Open details.`}
       >
         <div className="flex items-start justify-between gap-2">
-          <span className="font-medium text-sm text-foreground break-all">
+          <span className="flex items-center gap-2 font-medium text-sm text-foreground break-all">
             {data.event}
+            {isTest && (
+              <span
+                className="shrink-0 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                aria-label="Test delivery"
+              >
+                Test
+              </span>
+            )}
           </span>
           {data.status && (
             <span
@@ -141,6 +180,11 @@ export function WebhookLogCard({
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span aria-label="Time" title={formatDateTime(data.timestamp)}>
             {formatDateTime(data.timestamp)}
+          <span
+            aria-label="Time"
+            title={formatDateTime(new Date(data.timestamp).getTime())}
+          >
+            {formatDateTime(new Date(data.timestamp).getTime())}
           </span>
         </div>
 
@@ -181,6 +225,16 @@ export function WebhookLogCard({
                 {truncateId(data.txHash)}
               </span>
             )}
+            <a
+              href={explorerTxUrl(network, data.txHash) ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="font-mono text-primary hover:underline break-all"
+              aria-label={`View transaction ${data.txHash} on Stellar Explorer`}
+            >
+              {truncateId(data.txHash)}
+            </a>
           </div>
         )}
       </article>

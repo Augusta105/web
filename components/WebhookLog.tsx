@@ -12,7 +12,7 @@ import EmptyState from './EmptyState'
 import CopyButton from '@/components/CopyButton'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { formatAmount } from '@/lib/formatAmount'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import AlertRuleBadge from './AlertRuleBadge'
 import Modal from './Modal'
@@ -67,7 +67,7 @@ export function toWebhookEntry(alert: AlertPayload): WebhookEntry {
     status: parseDeliveryStatus(alert.delivery_status),
     amount: alert.amount?.toString(),
     txHash: alert.transaction_hash,
-    payload: alert,
+    payload: alert as unknown as Record<string, unknown>,
   }
 }
 
@@ -100,6 +100,7 @@ export function exportCSV(
   }, 1000)
 }
 
+export default function WebhookLog({ alerts, network, contractLabel }: WebhookLogProps) {
 export default function WebhookLog({
   alerts,
   network,
@@ -114,9 +115,12 @@ export default function WebhookLog({
     }
   )
   const [selectedAlert, setSelectedAlert] = useState<AlertPayload | null>(null)
+  const [showTestDeliveries, setShowTestDeliveries] = useState<boolean>(
+    () => searchParams?.get('test') === '1'
+  )
 
-  // Refresh relative time labels every minute from the shared clock
-  useNow(60_000)
+  // Refresh relative time labels and time-range boundaries every minute from the shared clock
+  const now = useNow(60_000)
 
   const [searchInput, setSearchInput] = useState(
     () => searchParams?.get('q') ?? ''
@@ -179,9 +183,10 @@ export default function WebhookLog({
       if (customTo) to = new Date(`${customTo}T23:59:59.999`).getTime()
     } else if (range !== 'all') {
       const days = range === '24h' ? 1 : range === '7d' ? 7 : 30
-      from = Date.now() - days * DAY_MS
+      from = now - days * DAY_MS
     }
     return alerts.filter((a) => {
+      if (!showTestDeliveries && a.is_test) return false
       if (selectedFilter && a.rule_triggered !== selectedFilter) return false
       if (a.timestamp < from || a.timestamp > to) return false
       if (
@@ -193,6 +198,7 @@ export default function WebhookLog({
       }
       return true
     })
+  }, [alerts, selectedFilter, debouncedSearch, range, customFrom, customTo, isInvertedRange, showTestDeliveries])
   }, [
     alerts,
     selectedFilter,
@@ -201,6 +207,7 @@ export default function WebhookLog({
     customFrom,
     customTo,
     isInvertedRange,
+    now,
   ])
 
   const initialSort = (searchParams?.get('sort') === 'asc' ? 'asc' : 'desc') as
@@ -215,8 +222,15 @@ export default function WebhookLog({
   const pageStart = Math.max(0, currentPage * pageSize)
   const pageAlerts = sortedEntries.slice(pageStart, pageStart + pageSize)
 
+  // Skip the reset on mount so ?page= deep links are honored (#449)
+  const didMountRef = useRef(false)
   useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
     setPage(0)
+  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, pageSize, sortDirection, showTestDeliveries])
   }, [
     selectedFilter,
     debouncedSearch,
@@ -229,8 +243,13 @@ export default function WebhookLog({
 
   // Mirror filters into URL search params
   useEffect(() => {
-    const params = new URLSearchParams()
+    if (typeof window === 'undefined') return
+    // Start from the live URL so unrelated params, the hash and history.state survive.
+    const params = new URLSearchParams(window.location.search)
+    for (const key of ['rule', 'q', 'range', 'from', 'to', 'sort', 'page'])
+      params.delete(key)
     if (selectedFilter) params.set('rule', selectedFilter)
+    if (showTestDeliveries) params.set('test', '1')
     if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim())
     if (range !== 'all') params.set('range', range)
     if (range === 'custom' && customFrom) params.set('from', customFrom)
@@ -245,6 +264,10 @@ export default function WebhookLog({
         : window.location.pathname
       window.history.replaceState(null, '', newUrl)
     }
+  }, [selectedFilter, debouncedSearch, range, customFrom, customTo, sortDirection, currentPage, showTestDeliveries])
+    const { pathname, hash } = window.location
+    const newUrl = `${qs ? `${pathname}?${qs}` : pathname}${hash}`
+    window.history.replaceState(window.history.state, '', newUrl)
   }, [
     selectedFilter,
     debouncedSearch,
@@ -291,6 +314,17 @@ export default function WebhookLog({
             {RULE_META[type]?.label ?? type} ({ruleCounts.get(type)})
           </button>
         ))}
+        <button
+          onClick={() => setShowTestDeliveries((v) => !v)}
+          aria-pressed={showTestDeliveries}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            showTestDeliveries
+              ? 'bg-amber-600 text-white'
+              : 'border border-zinc-700 text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          {showTestDeliveries ? 'Hide test deliveries' : 'Show test deliveries'}
+        </button>
       </div>
 
       {/* Search and Date Range */}
@@ -426,6 +460,14 @@ export default function WebhookLog({
                       </time>
                     </td>
                     <td className="py-3 pr-4">
+                      <span className="inline-flex items-center gap-2">
+                        <AlertRuleBadge type={alert.rule_triggered as AlertRuleType} />
+                        {alert.is_test && (
+                          <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                            Test
+                          </span>
+                        )}
+                      </span>
                       <AlertRuleBadge
                         type={alert.rule_triggered as AlertRuleType}
                       />
@@ -450,6 +492,7 @@ export default function WebhookLog({
                     <td className="py-3 pr-4 text-zinc-400">
                       {alert.amount !== undefined
                         ? `${formatAmount(alert.amount)} XLM`
+                        ? formatAmount(alert.amount)
                         : 'N/A'}
                     </td>
                     <td className="py-3 text-right">
