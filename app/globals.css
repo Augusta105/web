@@ -67,3 +67,13 @@ html.light .text-zinc-400 { color: #52525b; }
 html.light .text-zinc-500 { color: #71717a; }
 html.light .hover\:text-zinc-100:hover { color: #18181b; }
 html.light .hover\:text-zinc-300:hover { color: #3f3f46; }
+ * #537: many inputs set `focus:outline-none`, which removes the browser focus
+ * indicator. This restores one consistent, visible keyboard-focus ring for
+ * every interactive element (WCAG 2.2 AA 2.4.7 / 2.4.11). It only applies to
+ * keyboard focus (:focus-visible), so mouse clicks are unaffected, and it comes
+ * after the Tailwind utilities so it wins over `focus:outline-none`.
+ */
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
