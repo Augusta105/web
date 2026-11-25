@@ -96,7 +96,7 @@ export function getRetentionDays(): number {
 export function setRetentionDays(days: number) {
   const storage = getStorage()
   if (!storage || !Number.isFinite(days) || days < 1) return
-  storage.setItem(RETENTION_KEY, String(Math.floor(days)))
+  setTrackedItem(storage, RETENTION_KEY, String(Math.floor(days)))
   pruneOldAlerts()
 }
 
@@ -107,19 +107,56 @@ function getAlertCap(): number {
     : MAX_ALERTS_PER_CONTRACT
 }
 
+// #508: the estimate used to walk every localStorage key on each save. It is
+// now cached and adjusted by the size delta of each tracked write. The cache is
+// dropped when another tab writes (`storage` event), when TxWatch data is
+// cleared, and whenever the number of keys no longer matches what was counted
+// (for example after `localStorage.clear()`).
+let cachedStorageSize: number | null = null
+let cachedStorageLength = -1
+
+function entrySize(key: string, value: string): number {
+  return (key.length + value.length) * 2
+}
+
+function invalidateStorageSize() {
+  cachedStorageSize = null
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', invalidateStorageSize)
+}
+
 function getStorageSize(): number {
   const storage = getStorage()
   if (!storage) return 0
+  if (cachedStorageSize !== null && cachedStorageLength === storage.length) {
+    return cachedStorageSize
+  }
   let size = 0
   for (let i = 0; i < storage.length; i++) {
     const key = storage.key(i)
     if (!key) continue
     const value = storage.getItem(key)
     if (value !== null) {
-      size += (value.length + key.length) * 2 
+      size += entrySize(key, value)
     }
   }
+  cachedStorageSize = size
+  cachedStorageLength = storage.length
   return size
+}
+
+// Like `storage.setItem` (it throws the same way) but keeps the size cache in
+// step with the write instead of forcing a full recount.
+function setTrackedItem(storage: Storage, key: string, value: string) {
+  const previous = storage.getItem(key)
+  storage.setItem(key, value)
+  if (cachedStorageSize !== null) {
+    cachedStorageSize +=
+      entrySize(key, value) - (previous !== null ? entrySize(key, previous) : 0)
+    cachedStorageLength = storage.length
+  }
 }
 
 export function pruneOldAlerts() {
@@ -131,7 +168,7 @@ export function pruneOldAlerts() {
   const pruned = capAlertsPerContract(withinRetention)
   if (pruned.length < alerts.length) {
     try {
-      storage.setItem(ALERTS_KEY, JSON.stringify(pruned))
+      setTrackedItem(storage, ALERTS_KEY, JSON.stringify(pruned))
     } catch {
       // best effort
     }
@@ -147,7 +184,7 @@ function trimAlertsToRetention() {
   const trimmed = capAlertsPerContract(withinRetention)
   if (trimmed.length < alerts.length) {
     try {
-      storage.setItem(ALERTS_KEY, JSON.stringify(trimmed))
+      setTrackedItem(storage, ALERTS_KEY, JSON.stringify(trimmed))
     } catch {
       // best effort
     }
@@ -167,14 +204,14 @@ function isQuotaError(err: unknown): boolean {
 
 function writeItem(storage: Storage, key: string, value: string): boolean {
   try {
-    storage.setItem(key, value)
+    setTrackedItem(storage, key, value)
     return true
   } catch (err) {
     if (!isQuotaError(err)) return false
   }
   trimAlertsToRetention()
   try {
-    storage.setItem(key, value)
+    setTrackedItem(storage, key, value)
     return true
   } catch {
     return false
@@ -227,7 +264,7 @@ function getStorageVersion(): number {
 function setStorageVersion(version: number) {
   const storage = getStorage()
   if (!storage) return
-  storage.setItem(STORAGE_VERSION_KEY, version.toString())
+  setTrackedItem(storage, STORAGE_VERSION_KEY, version.toString())
 }
 
 export function migrateStorage(migrations: Record<number, () => void>) {
@@ -436,6 +473,7 @@ export function exportAllStorageData(): Record<string, string> {
 
 export function clearTxWatchStorage(keys: string[] = TXWATCH_KEYS): void {
   const targets = keys.filter((key) => TXWATCH_KEYS.includes(key))
+  invalidateStorageSize()
   const stores: Storage[] = []
   if (typeof window !== 'undefined') {
     stores.push(window.localStorage, window.sessionStorage)
