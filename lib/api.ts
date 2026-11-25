@@ -2,6 +2,7 @@ import { horizonUrl, isValidContractId } from '@/lib/stellar'
 import { SIGNATURE_HEADER, signWebhookPayload } from './webhookSignature'
 import { sanitizeBodySnippet } from './bodySnippet'
 import { getAuthorizationHeader, notifyAuthRequired } from './apiAuth'
+import { isValidFunctionName } from '@/lib/soroban'
 import type { AlertPayload, AlertRule, Network } from '@/types'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
@@ -161,6 +162,11 @@ export interface BuildTestWebhookPayloadOptions {
   network?: Network
   /** Configured rule to simulate. Defaults to `AnyTransaction`. */
   rule?: AlertRule
+  /**
+   * For `AdminFunctionCalled`, which of the rule's function names to simulate.
+   * Ignored unless it is one of `function_names`; defaults to the first.
+   */
+  functionName?: string
   label?: string
   /** Overridable for deterministic previews/tests; defaults to now. */
   timestamp?: number
@@ -181,6 +187,7 @@ export function buildTestWebhookPayload({
   contractId,
   network = 'testnet',
   rule,
+  functionName,
   label = 'Test Alert',
   timestamp = Date.now(),
   transactionHash = TEST_TX_HASH,
@@ -205,7 +212,11 @@ export function buildTestWebhookPayload({
       payload.function_name = rule.function_name.trim()
       break
     case 'AdminFunctionCalled':
-      payload.function_name = rule.function_names[0]?.trim()
+      payload.function_name = (
+        functionName !== undefined && rule.function_names.includes(functionName)
+          ? functionName
+          : rule.function_names[0]
+      )?.trim()
       break
     default:
       break
@@ -228,6 +239,8 @@ export function ruleFromPayload(payload: AlertPayload): AlertRule | undefined {
         function_name: payload.function_name ?? '',
       }
     case 'AdminFunctionCalled':
+      // Allow-list: only a syntactically valid function name is accepted (#447)
+      if (!isValidFunctionName(payload.function_name ?? '')) return undefined
       return {
         type: 'AdminFunctionCalled',
         function_names: [payload.function_name ?? ''],

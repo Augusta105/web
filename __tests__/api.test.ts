@@ -11,6 +11,7 @@ import {
 } from '@/lib/api'
 import { horizonUrl } from '@/lib/stellar'
 import { signWebhookPayload } from '@/lib/webhookSignature'
+import type { AlertRule } from '@/types'
 
 global.fetch = vi.fn()
 
@@ -68,6 +69,17 @@ describe('apiFetch', () => {
 })
 
 describe('buildTestWebhookPayload', () => {
+  it('simulates the chosen AdminFunctionCalled function when allowed (#447)', () => {
+    const rule: AlertRule = {
+      type: 'AdminFunctionCalled',
+      function_names: ['set_admin', 'upgrade'],
+    }
+    const base = { contractId: 'CBCDEF', rule, timestamp: 1 }
+    expect(buildTestWebhookPayload({ ...base, functionName: 'upgrade' }).function_name).toBe('upgrade')
+    expect(buildTestWebhookPayload({ ...base, functionName: 'evil' }).function_name).toBe('set_admin')
+    expect(buildTestWebhookPayload(base).function_name).toBe('set_admin')
+  })
+
   it('defaults to AnyTransaction with a well-formed hash and horizon link', () => {
     const payload = buildTestWebhookPayload({
       contractId: 'CBCDEF',

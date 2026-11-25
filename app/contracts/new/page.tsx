@@ -68,6 +68,7 @@ export default function NewContractPage() {
   
   // Test payload state
   const [testRuleIndex, setTestRuleIndex] = useState(0)
+  const [testFunctionName, setTestFunctionName] = useState('')
   const [testStatus, setTestStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const [testError, setTestError] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<TestWebhookResult | null>(null)
@@ -200,8 +201,9 @@ export default function NewContractPage() {
         contractId: testContractId,
         network,
         rule: testRule,
+        functionName: testFunctionName,
       }),
-    [testContractId, network, testRule]
+    [testContractId, network, testRule, testFunctionName]
   )
 
   useEffect(() => () => testAbortRef.current?.abort(), [])
@@ -750,7 +752,10 @@ export default function NewContractPage() {
               {rules.length > 0 ? (
                 <select
                   value={testRuleIndex}
-                  onChange={(e) => setTestRuleIndex(Number(e.target.value))}
+                  onChange={(e) => {
+                    setTestRuleIndex(Number(e.target.value))
+                    setTestFunctionName('')
+                  }}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-200"
                 >
                   {rules.map((r, idx) => (
@@ -761,6 +766,24 @@ export default function NewContractPage() {
                 </select>
               ) : (
                 <p className="text-xs text-zinc-500">Defaulting to AnyTransaction test payload</p>
+              )}
+              {testRule?.type === 'AdminFunctionCalled' && testRule.function_names.length > 1 && (
+                <select
+                  aria-label="Admin function to simulate"
+                  value={
+                    testRule.function_names.includes(testFunctionName)
+                      ? testFunctionName
+                      : testRule.function_names[0]
+                  }
+                  onChange={(e) => setTestFunctionName(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-zinc-200"
+                >
+                  {testRule.function_names.map((fn) => (
+                    <option key={fn} value={fn}>
+                      Function: {fn}
+                    </option>
+                  ))}
+                </select>
               )}
               {showPayloadPreview && (
                 <pre className="mt-2 p-2 rounded bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-300 overflow-x-auto">
