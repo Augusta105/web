@@ -9,6 +9,16 @@ import Modal from '@/components/Modal'
 import { AlertPayload, Network } from '@/types'
 
 export interface WebhookEntry {
+  id: string;
+  timestamp: string;
+  event: string;
+  contractAddress?: string;
+  status: 'success' | 'failed' | 'pending';
+  amount?: string;
+  asset?: string;
+  txHash?: string;
+  payload?: Record<string, unknown>;
+  isTest?: boolean;
   id: string
   timestamp: string
   event: string
@@ -49,6 +59,8 @@ function normalizeEntry(props: WebhookLogCardProps): WebhookEntry {
       asset: 'XLM',
       txHash: a.transaction_hash,
       payload: a as unknown as Record<string, unknown>,
+      isTest: a.is_test === true,
+    };
     }
   }
   return {
@@ -68,6 +80,13 @@ export function WebhookLogCard({
   const [isOpen, setIsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  const data = normalizeEntry({ alert, entry });
+  const payload = data.payload ?? data;
+  const json = JSON.stringify(payload, null, 2);
+  const isTest =
+    data.isTest === true ||
+    alert?.is_test === true ||
+    (data.payload as Record<string, unknown> | undefined)?.is_test === true;
   const data = normalizeEntry({ alert, entry })
   const payload = data.payload ?? data
   const json = JSON.stringify(payload, null, 2)
@@ -122,8 +141,16 @@ export function WebhookLogCard({
         aria-label={`Webhook event ${data.event} at ${data.timestamp}. Open details.`}
       >
         <div className="flex items-start justify-between gap-2">
-          <span className="font-medium text-sm text-foreground break-all">
+          <span className="flex items-center gap-2 font-medium text-sm text-foreground break-all">
             {data.event}
+            {isTest && (
+              <span
+                className="shrink-0 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                aria-label="Test delivery"
+              >
+                Test
+              </span>
+            )}
           </span>
           <span
             className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[data.status]}`}

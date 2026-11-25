@@ -30,9 +30,12 @@ export default function DashboardPage() {
     for (const contract of contracts) {
       collected.push(...getAlerts(contract.contract_id))
     }
-    setAllAlerts(collected)
+    const realAlerts = collected.filter((a) => !a.is_test)
+    setAllAlerts(realAlerts)
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
+    setAlertsToday(realAlerts.filter((a) => a.timestamp >= startOfToday.getTime()).length)
+    setNow(Date.now())
     setAlertsToday(
       collected.filter((a) => a.timestamp >= startOfToday.getTime()).length
     )

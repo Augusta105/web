@@ -5,6 +5,9 @@ import { WatchWalletChanges } from '@stellar/freighter-api'
 import { readFreighterConnection } from '@/lib/freighter'
 import {
   broadcastWalletChange,
+  subscribeWallet,
+  type WalletChangePayload,
+} from '@/lib/walletEvents'
   broadcastWalletChangeIfChanged,
   subscribeWallet,
 } from '@/lib/walletEvents'
@@ -22,12 +25,20 @@ const LATE_DETECTION_DELAYS_MS = [1000, 2000, 4000]
  */
 let watcher: WatchWalletChanges | null = null
 let watcherRefCount = 0
+let lastAddress: string | null = null
+let lastNetwork: string | null = null
 
 function acquireWalletWatcher(): () => void {
   if (!watcher) {
     const instance = new WatchWalletChanges(5000)
     instance.watch((result) => {
       const address = result?.address ?? null
+      const network = result?.network ?? null
+      const networkPassphrase = result?.networkPassphrase ?? null
+      if (address === lastAddress && network === lastNetwork) return
+      lastAddress = address
+      lastNetwork = network
+      broadcastWalletChange({ address, network, networkPassphrase })
       // Do not undo an in-app disconnect while the site is still approved.
       if (address && isUserDisconnected()) return
       broadcastWalletChange(address)
@@ -60,12 +71,20 @@ export function useWalletWatcher(): void {
 export interface WalletState {
   /** Connected public key, or null while disconnected. */
   publicKey: string | null
+  /** Active Freighter network, or null while unknown/disconnected. */
+  network: string | null
+  /** Passphrase of the active Freighter network, or null while unknown. */
+  networkPassphrase: string | null
   /** Freighter network id, e.g. `"TESTNET"`. */
   network: string | null
   /** True once the initial Freighter connection probe has settled. */
   initialized: boolean
   /** Set the wallet state everywhere, including this instance. */
-  publish: (publicKey: string | null) => void
+  publish: (
+    publicKey: string | null,
+    network?: string | null,
+    networkPassphrase?: string | null,
+  ) => void
 }
 
 /**
@@ -78,12 +97,26 @@ export interface WalletState {
 export function useWalletState(): WalletState {
   const [publicKey, setPublicKey] = useState<string | null>(null)
   const [network, setNetwork] = useState<string | null>(null)
+  const [networkPassphrase, setNetworkPassphrase] = useState<string | null>(null)
   const [initialized, setInitialized] = useState(false)
 
-  const publish = useCallback((next: string | null) => {
-    setPublicKey(next)
-    broadcastWalletChange(next)
-  }, [])
+  const publish = useCallback(
+    (
+      next: string | null,
+      nextNetwork: string | null = null,
+      nextNetworkPassphrase: string | null = null,
+    ) => {
+      setPublicKey(next)
+      setNetwork(nextNetwork)
+      setNetworkPassphrase(nextNetworkPassphrase)
+      broadcastWalletChange({
+        address: next,
+        network: nextNetwork,
+        networkPassphrase: nextNetworkPassphrase,
+      })
+    },
+    [],
+  )
 
   // One shared watcher for the whole app; no per-instance polling.
   useWalletWatcher()
@@ -94,6 +127,13 @@ export function useWalletState(): WalletState {
     async function probe() {
       let connection: Awaited<ReturnType<typeof readFreighterConnection>> = null
       try {
+        const connection = await readFreighterConnection()
+        if (!connection?.publicKey || cancelled) return
+        publish(
+          connection.publicKey,
+          connection.network ?? null,
+          connection.networkPassphrase ?? null,
+        )
         connection = await readFreighterConnection()
       } catch {
         // Extension refused to answer; stay in the disconnected state.
@@ -137,7 +177,16 @@ export function useWalletState(): WalletState {
 
   // `subscribeWallet` returns its own unsubscribe, which is exactly the
   // cleanup this effect needs.
-  useEffect(() => subscribeWallet(setPublicKey), [])
+  useEffect(
+    () =>
+      subscribeWallet((payload: WalletChangePayload) => {
+        setPublicKey(payload.address)
+        setNetwork(payload.network)
+        setNetworkPassphrase(payload.networkPassphrase)
+      }),
+    [],
+  )
 
+  return { publicKey, network, networkPassphrase, initialized, publish }
   return { publicKey, network, initialized, publish }
 }

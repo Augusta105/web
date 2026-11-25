@@ -56,6 +56,12 @@ export default function WalletStatusBadge() {
         if (!cancelled) setStatus('disconnected')
       })
 
+    // The probe above only covers this mount. A connect, disconnect or
+    // network switch triggered anywhere else in the app arrives on the
+    // event bus.
+    const unsubscribe = subscribeWallet((publicKey, network) => {
+      setStatus(publicKey ? 'connected' : 'disconnected')
+      setNetworkId(network ?? null)
     // The probe above only covers this mount. A connect or disconnect
     // triggered anywhere else in the app arrives on the event bus, which
     // only carries the public key, so a disconnect also clears the network.

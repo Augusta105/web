@@ -101,10 +101,19 @@ export default function FreighterConnect({
       }
     }
 
+    syncNetwork()
+
+    const unsubscribe = subscribeWallet((key, eventNetwork) => {
     const unsubscribe = subscribeWallet((key) => {
       if (key) {
         setMissingExtension(false)
-        syncNetwork()
+        // Prefer the network delivered on the event so the pill updates as soon
+        // as the user switches networks in Freighter, without a re-probe.
+        if (eventNetwork !== undefined) {
+          setNetwork(eventNetwork)
+        } else {
+          syncNetwork()
+        }
       } else {
         setNetwork(null)
       }

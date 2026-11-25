@@ -59,9 +59,18 @@ function groupKey(
   const value =
     groupBy === 'network'
       ? alert.network
+      : (alert as { ruleType?: string }).ruleType ?? (alert as AlertPayload).rule_triggered
       : ((alert as { ruleType?: string }).ruleType ??
         (alert as AlertPayload).rule_triggered)
   return value && value.trim().length > 0 ? value : 'unknown'
+}
+
+/**
+ * Test deliveries (is_test === true) are simulated and must never contribute
+ * to dashboard counts or charts.
+ */
+export function isTestAlert(alert: AlertRecord | AlertPayload): boolean {
+  return (alert as { is_test?: boolean }).is_test === true
 }
 
 /**
@@ -122,6 +131,8 @@ export function bucketAlerts(
   const groups = new Set<string>()
 
   for (const alert of alerts) {
+    if (isTestAlert(alert)) continue
+
     const time =
       typeof (alert as { timestamp?: unknown }).timestamp === 'number'
         ? (alert as { timestamp: number }).timestamp
@@ -175,4 +186,11 @@ export function isContractPaused(contract: {
  */
 export function countActiveWebhooks(contracts: WatchedContract[]): number {
   return contracts.filter(hasActiveWebhooks).length
+}
+
+/**
+ * Counts alerts, excluding simulated test deliveries.
+ */
+export function countAlerts(alerts: Array<AlertRecord | AlertPayload>): number {
+  return alerts.filter((alert) => !isTestAlert(alert)).length
 }
