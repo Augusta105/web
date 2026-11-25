@@ -244,9 +244,11 @@ export default function RuleBuilder({
           setError(`Invalid function names: ${invalid.join(', ')}`)
           return null
         }
+        // Build a local copy and sort it — never mutates the source array or any draft state.
+        const sortedNames = [...valid].sort()
         return {
           type: 'AdminFunctionCalled',
-          function_names: [...valid].sort(),
+          function_names: sortedNames,
         }
       }
       case 'AnyTransaction':
