@@ -124,3 +124,22 @@ export function formatRuleSummary(rule: AlertRule): string {
       return ''
   }
 }
+
+/**
+ * Formats an XLM amount for display (e.g. "1,234.5 XLM").
+ *
+ * Accepts either a numeric amount or a string (as returned by the API) and
+ * falls back to the raw value when it cannot be parsed as a number.
+ */
+export function formatAmount(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '') {
+    return '—'
+  }
+
+  const value = typeof amount === 'number' ? amount : Number(amount)
+  if (!Number.isFinite(value)) {
+    return `${amount} XLM`
+  }
+
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 7 })} XLM`
+}
