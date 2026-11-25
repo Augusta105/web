@@ -84,8 +84,8 @@ if (connection === null) {
 }
 ```
 
-This is what `FreighterConnect`, `useFreighterConnection`, `useWallet`, and
-`WalletStatusBadge` all use to render their state.
+This is what `FreighterConnect`, `useWalletState`, and `WalletStatusBadge` all
+use to render their state.
 
 ### 3. Explicit connect
 
@@ -132,11 +132,20 @@ const signedXdr = await signWithFreighter(txXdr, {
 - UI for connected/disconnected states
 - Disconnect button
 
-Connection state is not local to the button. `hooks/useWalletState.ts` probes the
-extension on mount and then subscribes to a `txwatch:wallet` CustomEvent, so the
-header button, the landing-page button, `WalletStatusBadge` and any form gate all
-show the same state. Disconnecting from one of them updates all of them, clears
+Connection state is not local to the button. `hooks/useWalletState.ts` is the
+single source of truth for wallet connection state. It probes the extension on
+mount and then subscribes to a `txwatch:wallet` CustomEvent, so the header
+button, the landing-page button, `WalletStatusBadge` and any form gate all show
+the same state. Disconnecting from one of them updates all of them, clears
 `localStorage['freighter_public_key']` and removes `window.__freighterPublicKey`.
+
+> **One hook, not three.** Earlier versions of the dashboard shipped
+> `lib/useFreighter.ts`, `lib/useFreighterConnection.ts` and `lib/useWallet.ts`
+> alongside `hooks/useWalletState.ts`. These overlapped in responsibility
+> (connection state, public key) and risked drifting out of sync with the
+> localStorage/window-global state. They have been consolidated into
+> `useWalletState`; do not reintroduce per-component wallet hooks. If you need
+> connection state, import `useWalletState` (see issue #522).
 
 Usage:
 
@@ -169,19 +178,34 @@ approved in Freighter until the user revokes it there.
 
 ### Checking Connection in Forms
 
-To verify the wallet is connected before saving data, use the connection hook
-rather than checking for the extension's presence:
+To verify the wallet is connected before saving data, use the shared wallet
+state hook rather than checking for the extension's presence:
 
 ```ts
-import { useFreighterConnection } from '@/lib/useFreighterConnection'
+import { useWalletState } from '@/hooks/useWalletState'
 
-const { isConnected, loading } = useFreighterConnection()
+const { publicKey, loading } = useWalletState()
 
-if (!isConnected) {
+if (!publicKey) {
   setError('Connect your Freighter wallet first')
   return
 }
 ```
+
+### Connection is not signature-verified
+
+Connecting only proves that the extension reports a public key — the app never
+asks the user to sign a challenge, so a reported address is **not** proof of
+ownership of the corresponding keypair. For a read-only monitoring dashboard
+this is acceptable, because no funds are custodied and no permissions are tied
+to the address.
+
+**Before any feature ties permissions to wallet identity** (for example, "who
+may edit a contract's rules"), a signed-challenge authentication flow must be
+added: the server issues a nonce, the wallet signs it via `signWithFreighter`,
+and the server verifies the signature against the claimed public key before
+granting any rights. Until then, treat the connected public key as a display
+value only. (See issue #521.)
 
 ## Network Mismatch Handling
 
@@ -209,6 +233,7 @@ Common error scenarios:
 |----------|--------|----------|
 | Extension not installed | `isExtensionAvailable()` is `false`, or a call times out | Prompt to install |
 | User rejects connection | `requestAccess()` resolves with `error` | Throw `FreighterRejectedError`, show "Connection rejected" |
+| Address not proven | No signed challenge is performed on connect | Do not grant permissions based on the public key alone; add a signed-challenge flow first |
 | Network mismatch | `getWalletNetwork()` returns a different value | Warn user to switch networks |
 | Transaction signing fails | `signTransaction()` resolves with `error` | Throw `FreighterRejectedError`, show error message |
 

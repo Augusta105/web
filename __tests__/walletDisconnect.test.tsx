@@ -85,6 +85,30 @@ describe('wallet state broadcast', () => {
     expect(localStorage.getItem('freighter_public_key')).toBeNull()
   })
 
+  it('clears the global public key on disconnect', async () => {
+    mockFreighter(true)
+
+    render(<FreighterConnect />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Disconnect' })
+      ).toBeInTheDocument()
+    })
+
+    window.__freighterPublicKey = MOCK_PUBLIC_KEY
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /Connect Freighter/ })
+      ).toBeInTheDocument()
+    })
+    expect(window.__freighterPublicKey).toBeUndefined()
+    expect(localStorage.getItem('freighter_public_key')).toBeNull()
+  })
+
   it('updates the badge and the other button on connect', async () => {
     mockFreighter(false)
 

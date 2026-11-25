@@ -138,10 +138,29 @@ export function nonContractAddressHint(input: string): string | null {
   return null
 }
 
+/**
+ * Returns true when `url` is an http(s) URL pointing at a public host.
+ *
+ * Rejects loopback, private and link-local hosts (e.g. localhost, 127.0.0.1,
+ * ::1, 10.x, 192.168.x, 169.254.x) in addition to non-http(s) protocols (#506).
+ *
+ * NOTE: This is client-side validation only. Any server-side fetcher must
+ * perform its own SSRF checks (including DNS resolution and redirect
+ * following) before making a request.
+ */
 export function isValidUrl(url: string): boolean {
   try {
     const u = new URL(url)
-    return u.protocol === 'http:' || u.protocol === 'https:'
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+    const hostClass = classifyHost(u.hostname)
+    if (
+      hostClass === 'loopback' ||
+      hostClass === 'private' ||
+      hostClass === 'linkLocal'
+    ) {
+      return false
+    }
+    return true
   } catch {
     return false
   }

@@ -42,6 +42,35 @@ describe('isValidUrl', () => {
     // The URL constructor strips surrounding whitespace, so these are treated as valid
     expect(isValidUrl('  https://example.com  ')).toBe(true)
   })
+
+  // #506: reject localhost/private/link-local hosts to avoid SSRF when fetched server-side
+  it('rejects localhost hostname', () => {
+    expect(isValidUrl('http://localhost:8000/webhook')).toBe(false)
+  })
+
+  it('rejects IPv4 loopback 127.0.0.1', () => {
+    expect(isValidUrl('http://127.0.0.1/')).toBe(false)
+  })
+
+  it('rejects IPv6 loopback [::1]', () => {
+    expect(isValidUrl('http://[::1]/')).toBe(false)
+  })
+
+  it('rejects private IP range 10.x.x.x', () => {
+    expect(isValidUrl('http://10.0.0.1/')).toBe(false)
+  })
+
+  it('rejects private IP range 192.168.x.x', () => {
+    expect(isValidUrl('http://192.168.1.1/')).toBe(false)
+  })
+
+  it('rejects link-local metadata endpoint 169.254.169.254', () => {
+    expect(isValidUrl('http://169.254.169.254/latest/meta-data/')).toBe(false)
+  })
+
+  it('still accepts public hosts', () => {
+    expect(isValidUrl('https://example.com/webhook')).toBe(true)
+  })
 })
 
 // #117: Webhook URL validation tests
