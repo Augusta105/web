@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { contractExists, type ContractLookupStatus } from '@/lib/contractExists';
 import { isValidContractId } from '@/lib/stellar';
 import type { Network } from '@/types';
@@ -15,11 +15,17 @@ interface ContractVerificationProps {
   status: CheckState;
   /** Optional reason reported by the lookup when it could not verify. */
   reason?: string | null;
+  /** Ledger until which the contract instance is live, when known. */
+  liveUntilLedgerSeq?: number | null;
   /** Whether the user has acknowledged a "not found" result. */
   overridden: boolean;
   onOverrideChange: (overridden: boolean) => void;
   /** Called with every result of the debounced deployment check. */
-  onStatusChange: (status: CheckState, reason?: string | null) => void;
+  onStatusChange: (
+    status: CheckState,
+    reason?: string | null,
+    liveUntilLedgerSeq?: number | null
+  ) => void;
 }
 
 /** Re-check after this long without typing, to avoid a request per keystroke. */
@@ -39,6 +45,7 @@ export default function ContractVerification({
   className = '',
   status,
   reason = null,
+  liveUntilLedgerSeq = null,
   overridden,
   onOverrideChange,
   onStatusChange,
@@ -46,6 +53,7 @@ export default function ContractVerification({
   const id = contractId.trim();
   const checkable = isValidContractId(id);
   const state = status;
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     onOverrideChange(false);
@@ -59,7 +67,7 @@ export default function ContractVerification({
       onStatusChange('checking', null);
       const result = await contractExists(network, id, { signal: controller.signal });
       if (controller.signal.aborted) return;
-      onStatusChange(result.status, result.reason ?? null);
+      onStatusChange(result.status, result.reason ?? null, result.liveUntilLedgerSeq ?? null);
     }, DEBOUNCE_MS);
 
     return () => {
@@ -68,7 +76,7 @@ export default function ContractVerification({
     };
     // onOverrideChange/onStatusChange are expected to be stable callbacks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, network, checkable]);
+  }, [id, network, checkable, attempt]);
 
   if (!checkable) return null;
 
@@ -89,7 +97,18 @@ export default function ContractVerification({
   if (state === 'found') {
     return (
       <p className={`text-xs text-emerald-400 ${className}`}>
-        Contract found on {network}.
+        Contract found on {network}
+        {liveUntilLedgerSeq != null ? ` (live until ledger ${liveUntilLedgerSeq})` : ''}.
+      </p>
+    );
+  }
+
+  if (state === 'archived') {
+    return (
+      <p role="status" className={`text-xs text-amber-400 ${className}`}>
+        Contract found on {network}, but its storage has expired (TTL
+        {liveUntilLedgerSeq != null ? ` ended at ledger ${liveUntilLedgerSeq}` : ' lapsed'}) and it
+        is archived. It must be restored before it can be invoked. Saving is not blocked.
       </p>
     );
   }
@@ -98,7 +117,22 @@ export default function ContractVerification({
     return (
       <p className={`text-xs text-zinc-500 ${className}`}>
         Could not verify the deployment on {network}
-        {reason ? ` (${reason})` : ''}. Saving is not blocked.
+        {reason ? ` (${reason})` : ''}. Saving is not blocked.{' '}
+        <button
+          type="button"
+          onClick={() => setAttempt((n) => n + 1)}
+          className="underline text-zinc-400 hover:text-zinc-200"
+        >
+          Retry check
+        </button>
+      </p>
+    );
+  }
+
+  if (state === 'invalid') {
+    return (
+      <p role="alert" className={`text-xs text-red-400 ${className}`}>
+        This is not a valid contract ID{reason ? ` (${reason})` : ''}.
       </p>
     );
   }

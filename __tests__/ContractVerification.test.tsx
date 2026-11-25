@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
+import { useState } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import ContractVerification, { type VerificationStatus } from '@/components/ContractVerification'
+import ContractVerification, { type CheckState } from '@/components/ContractVerification'
 
 global.fetch = vi.fn()
 
@@ -150,5 +151,52 @@ describe('ContractVerification', () => {
     await waitFor(() =>
       expect(screen.getByText(/Contract not found on futurenet/)).toBeInTheDocument()
     )
+  })
+})
+
+function ControlledVerification({ contractId }: { contractId: string }) {
+  const [status, setStatus] = useState<CheckState>('idle')
+  const [reason, setReason] = useState<string | null>(null)
+  const [overridden, setOverridden] = useState(false)
+  return (
+    <ContractVerification
+      network="testnet"
+      contractId={contractId}
+      status={status}
+      reason={reason}
+      overridden={overridden}
+      onOverrideChange={setOverridden}
+      onStatusChange={(s, r) => {
+        setStatus(s)
+        setReason(r ?? null)
+      }}
+    />
+  )
+}
+
+describe('ContractVerification retry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('re-runs the check when "Retry check" is clicked after the RPC was unavailable', async () => {
+    fetchMock().mockRejectedValueOnce(new Error('fetch failed'))
+    render(<ControlledVerification contractId={CONTRACT_ID} />)
+    await vi.advanceTimersByTimeAsync(600)
+
+    const retry = await screen.findByRole('button', { name: 'Retry check' })
+    expect(fetchMock()).toHaveBeenCalledTimes(1)
+
+    mockRpc({ jsonrpc: '2.0', id: 1, result: { entries: [{}] } })
+    fireEvent.click(retry)
+    await vi.advanceTimersByTimeAsync(600)
+
+    await waitFor(() => expect(screen.getByText(/Contract found on testnet/)).toBeInTheDocument())
+    expect(fetchMock()).toHaveBeenCalledTimes(2)
   })
 })

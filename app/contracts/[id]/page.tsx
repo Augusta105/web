@@ -27,6 +27,8 @@ import { useNow } from '@/hooks/useNow'
 import { useToast } from '@/components/ToastProvider'
 import NetworkBadge from '@/components/NetworkBadge'
 import NetworkEditField from '@/components/NetworkEditField'
+import ContractVerification, { type CheckState } from '@/components/ContractVerification'
+import { deploymentBlocksSave } from '@/lib/contractExists'
 import AlertRuleBadge from '@/components/AlertRuleBadge'
 import WebhookLog from '@/components/WebhookLog'
 import WebhookTestButton from '@/components/WebhookTestButton'
@@ -71,6 +73,10 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
   const [metadataError, setMetadataError] = useState<string | null>(null)
   const [metadataWarning, setMetadataWarning] = useState<string | null>(null)
   const [editedLabelWarning, setEditedLabelWarning] = useState<string | null>(null)
+  const [verificationStatus, setVerificationStatus] = useState<CheckState>('idle')
+  const [verificationReason, setVerificationReason] = useState<string | null>(null)
+  const [verificationLiveUntil, setVerificationLiveUntil] = useState<number | null>(null)
+  const [verificationOverridden, setVerificationOverridden] = useState(false)
 
   const [walletNetworkMismatch, setWalletNetworkMismatch] = useState<string | null>(null)
 
@@ -220,6 +226,10 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
     setMetadataError(null)
     setMetadataWarning(null)
     setEditedLabelWarning(null)
+    setVerificationStatus('idle')
+    setVerificationReason(null)
+    setVerificationLiveUntil(null)
+    setVerificationOverridden(false)
     setShowEditMetadata(true)
     trackEvent('metadata_edit_opened', { contractId: params.id })
   }
@@ -262,6 +272,21 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
     ) {
       setMetadataError('A contract with this ID already exists on the selected network')
       return
+    }
+
+    // Switching network deletes the old network's alert history, so require the
+    // contract to be found on the new one (or an explicit override) first.
+    if (networkChanged) {
+      if (verificationStatus === 'checking') {
+        setMetadataError('Still checking the deployment on the selected network. Try again in a moment.')
+        return
+      }
+      if (deploymentBlocksSave(verificationStatus, verificationOverridden)) {
+        setMetadataError(
+          `Contract not found on ${editedNetwork}. Tick the override to save anyway.`
+        )
+        return
+      }
     }
 
     const updated: WatchedContract = {
@@ -493,7 +518,12 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
 
           <NetworkEditField
             currentNetwork={editedNetwork}
-            onNetworkChange={setEditedNetwork}
+            onNetworkChange={(network) => {
+              setEditedNetwork(network)
+              // Drop the previous network's result until the new check reports.
+              setVerificationStatus('idle')
+              setVerificationOverridden(false)
+            }}
             checkDuplicate={(network) =>
               getContracts().some(
                 (c) =>
@@ -503,6 +533,23 @@ export default function ContractDetailPage({ params }: { params: { id: string } 
               )
             }
           />
+
+          {editedNetwork !== contract.network && (
+            <ContractVerification
+              network={editedNetwork}
+              contractId={contract.contract_id}
+              status={verificationStatus}
+              reason={verificationReason}
+              liveUntilLedgerSeq={verificationLiveUntil}
+              onStatusChange={(status, reason, liveUntil) => {
+                setVerificationStatus(status)
+                setVerificationReason(reason ?? null)
+                setVerificationLiveUntil(liveUntil ?? null)
+              }}
+              overridden={verificationOverridden}
+              onOverrideChange={setVerificationOverridden}
+            />
+          )}
 
           {metadataWarning && (
             <div className="flex items-start justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-sm text-amber-300">
