@@ -3,6 +3,7 @@ import { SIGNATURE_HEADER, signWebhookPayload } from './webhookSignature'
 import { sanitizeBodySnippet } from './bodySnippet'
 import { getAuthorizationHeader, notifyAuthRequired } from './apiAuth'
 import { isValidFunctionName } from '@/lib/soroban'
+import { largeTransferAssetLabel } from '@/types'
 import type { AlertPayload, AlertRule, Network } from '@/types'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
@@ -147,7 +148,7 @@ export const TEST_CONTRACT_ID =
 export function describeRule(rule: AlertRule): string {
   switch (rule.type) {
     case 'LargeTransfer':
-      return `${rule.type} (over ${rule.threshold_xlm} XLM)`
+      return `${rule.type} (over ${rule.threshold_xlm} ${largeTransferAssetLabel(rule)})`
     case 'FunctionCalled':
       return `${rule.type} (${rule.function_name.trim()})`
     case 'AdminFunctionCalled':
