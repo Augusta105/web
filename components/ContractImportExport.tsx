@@ -26,6 +26,7 @@ export default function ContractImportExport() {
   const [mode, setMode] = useState<ImportMode>('merge')
   const [dupes, setDupes] = useState<DuplicateStrategy>('skip')
   const [exportMode, setExportMode] = useState<ExportMode>('contracts')
+  const [includeSecrets, setIncludeSecrets] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [failures, setFailures] = useState<string[]>([])
   const [confirmReplace, setConfirmReplace] = useState(false)
@@ -46,7 +47,7 @@ export default function ContractImportExport() {
             gatherSettings(),
             exportAllStorageData()
           )
-        : buildSnapshot(contracts)
+        : buildSnapshot(contracts, { includeSecrets })
     const json = JSON.stringify(payload, null, 2)
     const url = URL.createObjectURL(
       new Blob([json], { type: 'application/json' })
@@ -169,6 +170,14 @@ export default function ContractImportExport() {
             <option value="everything">Everything</option>
           </select>
         </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-400">
+          <input
+            type="checkbox"
+            checked={includeSecrets}
+            onChange={(e) => setIncludeSecrets(e.target.checked)}
+          />
+          Include signing secrets
+        </label>
         <button
           onClick={handleExport}
           className="px-3 py-1.5 rounded bg-indigo-600 text-white text-sm"
@@ -176,6 +185,12 @@ export default function ContractImportExport() {
           Export
         </button>
       </div>
+      {!includeSecrets && (
+        <p className="text-xs text-amber-400">
+          Webhook signing secrets are excluded from the export. You will need
+          to re-enter them after importing.
+        </p>
+      )}
       <div>
         <label
           className="block text-sm text-zinc-400 mb-1"
@@ -203,6 +218,10 @@ export default function ContractImportExport() {
             {plan.duplicates.length} duplicate.
             {parsed.alerts !== undefined &&
               ` ${parsed.alerts.length} alert(s) to restore, ${parsed.skippedAlerts ?? 0} skipped.`}
+          </p>
+          <p className="text-amber-400">
+            Imported contracts do not include webhook signing secrets. Re-enter
+            them for each contract after importing.
           </p>
           {plan.toSave.length > 0 && (
             <div>

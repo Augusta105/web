@@ -122,7 +122,7 @@ describe('useFreighter', () => {
     expect(result.current.isConnected).toBe(true);
   });
 
-  it('connect() surfaces FreighterUnavailableError by opening the install page', async () => {
+  it('connect() surfaces FreighterUnavailableError without auto-opening the install page', async () => {
     mockedRead.mockResolvedValue({
       publicKey: null,
       network: null,
@@ -140,10 +140,9 @@ describe('useFreighter', () => {
       await result.current.connect();
     });
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    const openedUrl = String(openSpy.mock.calls[0][0]);
-    expect(openedUrl).toContain('freighter');
+    expect(openSpy).not.toHaveBeenCalled();
     expect(result.current.isConnected).toBe(false);
+    expect(result.current.publicKey).toBeNull();
   });
 
   it('disconnect() clears the window.__freighterPublicKey global', async () => {
@@ -251,7 +250,7 @@ describe('useFreighterConnection', () => {
     expect(result.current.isConnected).toBe(true);
   });
 
-  it('connect() surfaces FreighterUnavailableError by opening the install page', async () => {
+  it('connect() surfaces FreighterUnavailableError without auto-opening the install page', async () => {
     mockedRead.mockResolvedValue({
       publicKey: null,
       network: null,
@@ -269,10 +268,9 @@ describe('useFreighterConnection', () => {
       await result.current.connect();
     });
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    const openedUrl = String(openSpy.mock.calls[0][0]);
-    expect(openedUrl).toContain('freighter');
+    expect(openSpy).not.toHaveBeenCalled();
     expect(result.current.isConnected).toBe(false);
+    expect(result.current.publicKey).toBeNull();
   });
 
   it('disconnect() clears the window.__freighterPublicKey global', async () => {

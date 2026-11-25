@@ -5,7 +5,6 @@ import { broadcastWalletChange, subscribeWallet } from '@/lib/walletEvents'
 import {
   connectFreighter,
   FreighterUnavailableError,
-  openFreighterInstallPage,
   readFreighterConnection,
 } from '@/lib/freighter'
 
@@ -82,9 +81,6 @@ export function useFreighter(): UseFreighterResult {
         error: null,
       })
     } catch (err) {
-      if (err instanceof FreighterUnavailableError) {
-        openFreighterInstallPage()
-      }
       setState((prev) => ({
         ...prev,
         loading: false,
