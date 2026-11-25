@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useContracts } from '@/lib/useContracts'
 import { hasActiveWebhooks } from '@/lib/contractsApi'
-import { getAlerts, getNetworkDistribution, onAlertsChange } from '@/lib/storage'
+import {
+  getAlerts,
+  getNetworkDistribution,
+  onAlertsChange,
+} from '@/lib/storage'
 import ContractCard from '@/components/ContractCard'
 import EmptyState from '@/components/EmptyState'
 import NetworkBadge from '@/components/NetworkBadge'
@@ -20,7 +24,6 @@ export default function DashboardPage() {
   const [alertsToday, setAlertsToday] = useState(0)
   const [allAlerts, setAllAlerts] = useState<AlertPayload[]>([])
   const [mounted, setMounted] = useState(false)
-  const [now, setNow] = useState<number>(() => Date.now())
 
   const refreshAlertsToday = useCallback(() => {
     const collected: AlertPayload[] = []
@@ -30,8 +33,9 @@ export default function DashboardPage() {
     setAllAlerts(collected)
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
-    setAlertsToday(collected.filter((a) => a.timestamp >= startOfToday.getTime()).length)
-    setNow(Date.now())
+    setAlertsToday(
+      collected.filter((a) => a.timestamp >= startOfToday.getTime()).length
+    )
     setMounted(true)
   }, [contracts])
 
@@ -40,19 +44,10 @@ export default function DashboardPage() {
     [allAlerts]
   )
 
-  // Update `now` every 60 seconds
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(Date.now())
-    }, 60000)
-    return () => clearInterval(timer)
-  }, [])
-
-  // Update `now` on alert changes
+  // Update alert-derived state whenever an alert is added or removed anywhere in the app.
   useEffect(() => {
     return onAlertsChange(() => {
       refreshAlertsToday()
-      setNow(Date.now())
     })
   }, [refreshAlertsToday])
 
@@ -72,7 +67,11 @@ export default function DashboardPage() {
 
     function scheduleMidnight() {
       const now = new Date()
-      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      const midnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1
+      )
       timer = setTimeout(() => {
         refreshAlertsToday()
         scheduleMidnight()
@@ -84,7 +83,10 @@ export default function DashboardPage() {
   }, [refreshAlertsToday])
 
   const activeWebhooks = contracts.filter(hasActiveWebhooks).length
-  const networkCounts = contracts.length > 0 ? getNetworkDistribution() : ({} as Record<Network, number>)
+  const networkCounts =
+    contracts.length > 0
+      ? getNetworkDistribution()
+      : ({} as Record<Network, number>)
   const networkSummary = (['mainnet', 'testnet', 'futurenet'] as Network[])
     .filter((network) => networkCounts[network])
     .map((network) => ({ network, count: networkCounts[network] }))
@@ -92,8 +94,14 @@ export default function DashboardPage() {
   // Sort by most recent alert (descending), then by label (ascending).
   const sortedContracts = useMemo(() => {
     return [...contracts].sort((a, b) => {
-      const aAlert = latestAlerts[`${a.network}:${a.contract_id}`] ?? latestAlerts[a.contract_id] ?? 0
-      const bAlert = latestAlerts[`${b.network}:${b.contract_id}`] ?? latestAlerts[b.contract_id] ?? 0
+      const aAlert =
+        latestAlerts[`${a.network}:${a.contract_id}`] ??
+        latestAlerts[a.contract_id] ??
+        0
+      const bAlert =
+        latestAlerts[`${b.network}:${b.contract_id}`] ??
+        latestAlerts[b.contract_id] ??
+        0
       if (bAlert !== aAlert) return bAlert - aAlert
       return a.label.localeCompare(b.label)
     })
@@ -109,14 +117,26 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">Dashboard</h1>
-          <p className="text-sm text-zinc-500 mt-1">Monitor your Soroban contracts in real time</p>
+          <p className="text-sm text-zinc-500 mt-1">
+            Monitor your Soroban contracts in real time
+          </p>
         </div>
         <Link
           href="/contracts/new"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white transition-colors"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 4v16m8-8H4"
+            />
           </svg>
           Add Contract
         </Link>
@@ -125,23 +145,47 @@ export default function DashboardPage() {
       {/* Stats bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
-          { label: 'Contracts Watched', value: contracts.length, href: '/contracts' },
-          { label: 'Alerts Today', value: alertsToday, href: '/contracts?filter=alerts-today' },
-          { label: 'Active Webhooks', value: activeWebhooks, href: '/contracts?filter=webhooks' },
+          {
+            label: 'Contracts Watched',
+            value: contracts.length,
+            href: '/contracts',
+          },
+          {
+            label: 'Alerts Today',
+            value: alertsToday,
+            href: '/contracts?filter=alerts-today',
+          },
+          {
+            label: 'Active Webhooks',
+            value: activeWebhooks,
+            href: '/contracts?filter=webhooks',
+          },
         ].map((stat) => (
-          <Link key={stat.label} href={stat.href} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-600 transition-colors">
+          <Link
+            key={stat.label}
+            href={stat.href}
+            className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-600 transition-colors"
+          >
             <p className="text-2xl font-bold text-zinc-100">{stat.value}</p>
             <p className="text-xs text-zinc-500 mt-1">{stat.label}</p>
           </Link>
         ))}
 
-        <Link href="/contracts" className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-600 transition-colors">
-          <p className="text-2xl font-bold text-zinc-100">{Object.keys(networkCounts).length}</p>
+        <Link
+          href="/contracts"
+          className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-600 transition-colors"
+        >
+          <p className="text-2xl font-bold text-zinc-100">
+            {Object.keys(networkCounts).length}
+          </p>
           <p className="text-xs text-zinc-500 mt-1">Networks in use</p>
           <div className="mt-4 space-y-2">
             {networkSummary.length > 0 ? (
               networkSummary.map(({ network, count }) => (
-                <div key={network} className="flex items-center justify-between">
+                <div
+                  key={network}
+                  className="flex items-center justify-between"
+                >
                   <NetworkBadge network={network} />
                   <span className="text-xs text-zinc-400">{count}</span>
                 </div>
@@ -161,7 +205,10 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-zinc-100">Contracts</h2>
           {hasMoreContracts && (
-            <Link href="/contracts" className="text-sm text-indigo-400 hover:text-indigo-300">
+            <Link
+              href="/contracts"
+              className="text-sm text-indigo-400 hover:text-indigo-300"
+            >
               View all {sortedContracts.length}
             </Link>
           )}
@@ -186,7 +233,10 @@ export default function DashboardPage() {
               <ContractCard
                 key={c.id}
                 contract={c}
-                lastAlertTime={latestAlerts[`${c.network}:${c.contract_id}`] ?? latestAlerts[c.contract_id]}
+                lastAlertTime={
+                  latestAlerts[`${c.network}:${c.contract_id}`] ??
+                  latestAlerts[c.contract_id]
+                }
               />
             ))}
           </div>

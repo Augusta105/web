@@ -1,41 +1,44 @@
-'use client';
+'use client'
 
-import React, { useCallback, useState } from 'react';
-import { formatAmount } from '@/lib/formatAmount';
-import { truncateId, explorerTxUrl } from '@/lib/stellar';
-import { formatDateTime } from '@/lib/format';
-import Modal from '@/components/Modal';
-import { AlertPayload, Network } from '@/types';
+import React, { useCallback, useState } from 'react'
+import { formatAmount } from '@/lib/formatAmount'
+import { truncateId, explorerTxUrl } from '@/lib/stellar'
+import { formatDateTime } from '@/lib/format'
+import { explorerContractUrl } from '@/lib/explorer'
+import Modal from '@/components/Modal'
+import { AlertPayload, Network } from '@/types'
 
 export interface WebhookEntry {
-  id: string;
-  timestamp: string;
-  event: string;
-  contractAddress?: string;
-  status: 'success' | 'failed' | 'pending';
-  amount?: string;
-  asset?: string;
-  txHash?: string;
-  payload?: Record<string, unknown>;
+  id: string
+  timestamp: string
+  event: string
+  contractAddress?: string
+  status: 'success' | 'failed' | 'pending'
+  amount?: string
+  asset?: string
+  txHash?: string
+  payload?: Record<string, unknown>
 }
 
 export interface WebhookLogCardProps {
-  alert?: AlertPayload;
-  entry?: WebhookEntry;
-  network?: Network | string;
-  onClick?: () => void;
+  alert?: AlertPayload
+  entry?: WebhookEntry
+  network?: Network | string
+  onClick?: () => void
 }
 
 const STATUS_STYLES: Record<WebhookEntry['status'], string> = {
-  success: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  failed:  'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-};
+  success:
+    'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  pending:
+    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+}
 
 function normalizeEntry(props: WebhookLogCardProps): WebhookEntry {
-  if (props.entry) return props.entry;
+  if (props.entry) return props.entry
   if (props.alert) {
-    const a = props.alert;
+    const a = props.alert
     return {
       id: a.transaction_hash,
       timestamp: new Date(a.timestamp).toISOString(),
@@ -46,60 +49,67 @@ function normalizeEntry(props: WebhookLogCardProps): WebhookEntry {
       asset: 'XLM',
       txHash: a.transaction_hash,
       payload: a as unknown as Record<string, unknown>,
-    };
+    }
   }
   return {
     id: '',
     timestamp: new Date().toISOString(),
     event: 'Unknown',
     status: 'success',
-  };
+  }
 }
 
-export function WebhookLogCard({ alert, entry, network = 'mainnet', onClick }: WebhookLogCardProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+export function WebhookLogCard({
+  alert,
+  entry,
+  network = 'mainnet',
+  onClick,
+}: WebhookLogCardProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
 
-  const data = normalizeEntry({ alert, entry });
-  const payload = data.payload ?? data;
-  const json = JSON.stringify(payload, null, 2);
+  const data = normalizeEntry({ alert, entry })
+  const payload = data.payload ?? data
+  const json = JSON.stringify(payload, null, 2)
 
-  const open = useCallback(() => setIsOpen(true), []);
-  const close = useCallback(() => setIsOpen(false), []);
+  const open = useCallback(() => setIsOpen(true), [])
+  const close = useCallback(() => setIsOpen(false), [])
 
   const handleClick = useCallback(() => {
     if (onClick) {
-      onClick();
+      onClick()
     } else {
-      open();
+      open()
     }
-  }, [onClick, open]);
+  }, [onClick, open])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
       if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        handleClick();
+        e.preventDefault()
+        handleClick()
       }
     },
-    [handleClick],
-  );
+    [handleClick]
+  )
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(json);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(json)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
     } catch {
-      setCopied(false);
+      setCopied(false)
     }
-  }, [json]);
+  }, [json])
 
-  const explorerHref = data.txHash
-    ? explorerTxUrl(network, data.txHash)
-    : data.contractAddress
-      ? `https://stellar.expert/explorer/${network === 'mainnet' ? 'public' : network}/contract/${data.contractAddress}`
-      : `https://stellar.expert/explorer/${network === 'mainnet' ? 'public' : network}`;
+  const txHref = data.txHash ? explorerTxUrl(network, data.txHash) : null
+  const explorerHref =
+    txHref ??
+    (data.contractAddress
+      ? explorerContractUrl(network, data.contractAddress)
+      : null) ??
+    undefined
 
   return (
     <>
@@ -123,7 +133,12 @@ export function WebhookLogCard({ alert, entry, network = 'mainnet', onClick }: W
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span aria-label="Time" title={formatDateTime(data.timestamp)}>{formatDateTime(data.timestamp)}</span>
+          <span
+            aria-label="Time"
+            title={formatDateTime(new Date(data.timestamp).getTime())}
+          >
+            {formatDateTime(new Date(data.timestamp).getTime())}
+          </span>
         </div>
 
         {data.contractAddress && (
@@ -148,7 +163,7 @@ export function WebhookLogCard({ alert, entry, network = 'mainnet', onClick }: W
           <div className="text-xs">
             <span className="text-muted-foreground">Tx: </span>
             <a
-              href={explorerTxUrl(network, data.txHash)}
+              href={explorerTxUrl(network, data.txHash) ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
@@ -161,11 +176,7 @@ export function WebhookLogCard({ alert, entry, network = 'mainnet', onClick }: W
         )}
       </article>
 
-      <Modal
-        open={isOpen}
-        onClose={close}
-        title="Alert Detail"
-      >
+      <Modal open={isOpen} onClose={close} title="Alert Detail">
         <div className="space-y-4">
           <pre className="whitespace-pre-wrap break-all rounded-md bg-zinc-800 p-3 text-xs font-mono text-zinc-200 max-h-96 overflow-y-auto">
             {json}
@@ -191,7 +202,7 @@ export function WebhookLogCard({ alert, entry, network = 'mainnet', onClick }: W
         </div>
       </Modal>
     </>
-  );
+  )
 }
 
-export default WebhookLogCard;
+export default WebhookLogCard

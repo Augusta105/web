@@ -6,6 +6,9 @@ import { readFreighterConnection } from '@/lib/freighter'
 import { broadcastWalletChange, subscribeWallet } from '@/lib/walletEvents'
 import { isUserDisconnected } from '@/lib/disconnectFlag'
 
+/** Follow-up probes after the first one finds the extension unreachable. */
+const LATE_DETECTION_DELAYS_MS = [1000, 2000, 4000]
+
 /**
  * Single app-level watcher shared by every wallet-aware component.
  *
@@ -82,14 +85,31 @@ export function useWalletState(): WalletState {
     let cancelled = false
 
     async function probe() {
+      let connection: Awaited<ReturnType<typeof readFreighterConnection>> = null
       try {
-        const connection = await readFreighterConnection()
-        if (!connection?.publicKey || cancelled) return
-        publish(connection.publicKey)
+        connection = await readFreighterConnection()
       } catch {
         // Extension refused to answer; stay in the disconnected state.
-      } finally {
-        if (!cancelled) setInitialized(true)
+      }
+      if (cancelled) return
+      if (connection?.publicKey) publish(connection.publicKey)
+      setInitialized(true)
+
+      // The extension can inject its API after the first probe on a slow
+      // machine. `null` means "not reachable" (as opposed to a reachable but
+      // locked wallet), so keep checking for a short window in the background
+      // instead of leaving the user on a false "not connected" state (#527).
+      for (const delay of LATE_DETECTION_DELAYS_MS) {
+        if (connection) return
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        if (cancelled) return
+        try {
+          connection = await readFreighterConnection()
+        } catch {
+          connection = null
+        }
+        if (cancelled) return
+        if (connection?.publicKey) publish(connection.publicKey)
       }
     }
 

@@ -144,27 +144,3 @@ export function deliverWebhook(
     req.end(body)
   })
 }
-
-/**
- * Fixed-window per-key rate limiter (in memory, per server instance).
- */
-export function createRateLimiter(limit: number, windowMs: number) {
-  const windows = new Map<string, { start: number; count: number }>()
-  return (
-    key: string,
-    now = Date.now()
-  ): { allowed: boolean; retryAfterMs: number } => {
-    if (windows.size > 10000) {
-      windows.forEach((w, k) => {
-        if (now - w.start >= windowMs) windows.delete(k)
-      })
-    }
-    let w = windows.get(key)
-    if (!w || now - w.start >= windowMs) {
-      w = { start: now, count: 0 }
-      windows.set(key, w)
-    }
-    w.count += 1
-    return { allowed: w.count <= limit, retryAfterMs: w.start + windowMs - now }
-  }
-}

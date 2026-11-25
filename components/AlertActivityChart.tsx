@@ -1,11 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import {
-  bucketAlerts as bucketAlertsDashboard,
-  AlertBucket,
-  AlertGroupBy,
-} from '@/lib/dashboard'
+import { bucketAlerts, AlertBucket, AlertGroupBy } from '@/lib/dashboard'
 import { AlertPayload } from '@/types'
 
 export const SERIES_COLORS = [
@@ -33,7 +29,10 @@ const RULE_COLORS: Record<string, string> = {
   TransactionFailed: '#f43f5e',
 }
 
-export function getSeriesColor(group: string, groupBy: AlertGroupBy = 'network'): string {
+export function getSeriesColor(
+  group: string,
+  groupBy: AlertGroupBy = 'network'
+): string {
   if (groupBy === 'network' && NETWORK_COLORS[group.toLowerCase()]) {
     return NETWORK_COLORS[group.toLowerCase()]
   }
@@ -55,8 +54,6 @@ function hashString(str: string): number {
   return hash
 }
 
-export { bucketAlertsDashboard as bucketAlerts }
-
 interface ChartSectionProps {
   title: string
   buckets: AlertBucket[]
@@ -74,8 +71,8 @@ export function ActivityChartSection({
 }: ChartSectionProps) {
   const max = Math.max(1, ...buckets.map((b) => b.total))
   const width = 360
-  const height = 120
-  const padding = { top: 10, right: 10, bottom: 8, left: 10 }
+  const height = 140
+  const padding = { top: 10, right: 10, bottom: 24, left: 10 }
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
   const slot = plotWidth / Math.max(1, buckets.length)
@@ -145,7 +142,10 @@ export function ActivityChartSection({
               // On tablet, show every 3rd label
               // On desktop, show all
               if (i % 6 !== 0) {
-                visibility = i % 3 === 0 ? 'hidden sm:block text-center' : 'hidden lg:block text-center'
+                visibility =
+                  i % 3 === 0
+                    ? 'hidden sm:block text-center'
+                    : 'hidden lg:block text-center'
               }
             }
             return (
@@ -160,7 +160,10 @@ export function ActivityChartSection({
       {groups.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2 text-xs border-t border-zinc-800/80 pt-3">
           {groups.map((group) => (
-            <span key={group} className="inline-flex items-center gap-1.5 text-zinc-400">
+            <span
+              key={group}
+              className="inline-flex items-center gap-1.5 text-zinc-400"
+            >
               <span
                 className="w-2.5 h-2.5 rounded-sm inline-block"
                 style={{ backgroundColor: getSeriesColor(group) }}
@@ -209,15 +212,14 @@ export interface AlertActivityChartProps {
 export default function AlertActivityChart(props: AlertActivityChartProps) {
   const [groupBy, setGroupBy] = useState<AlertGroupBy>('network')
   const anchor = props.now ?? new Date()
-
   const alerts = props.alerts ?? []
 
   const daily = useMemo(
-    () => bucketAlertsDashboard(alerts, '7d', groupBy, anchor),
+    () => bucketAlerts(alerts, '7d', groupBy, anchor),
     [alerts, groupBy, anchor]
   )
   const hourly = useMemo(
-    () => bucketAlertsDashboard(alerts, '24h', groupBy, anchor),
+    () => bucketAlerts(alerts, '24h', groupBy, anchor),
     [alerts, groupBy, anchor]
   )
 
@@ -228,12 +230,13 @@ export default function AlertActivityChart(props: AlertActivityChartProps) {
         title={props.title}
         buckets={props.buckets}
         groups={[]}
-        formatLabel={(d) => d.toLocaleDateString(undefined, { weekday: 'short' })}
+        formatLabel={(d) =>
+          d.toLocaleDateString(undefined, { weekday: 'short' })
+        }
         isHourly={props.title.includes('24')}
       />
     )
   }
-
 
   return (
     <div className="space-y-4">
@@ -269,7 +272,9 @@ export default function AlertActivityChart(props: AlertActivityChartProps) {
           title="Alerts (last 7 days)"
           buckets={daily.buckets}
           groups={daily.groups}
-          formatLabel={(d) => d.toLocaleDateString(undefined, { weekday: 'short' })}
+          formatLabel={(d) =>
+            d.toLocaleDateString(undefined, { weekday: 'short' })
+          }
         />
         <ActivityChartSection
           title="Alerts (last 24 hours)"

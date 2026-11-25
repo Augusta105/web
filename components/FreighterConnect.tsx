@@ -13,7 +13,6 @@ import {
 import {
   connectFreighter,
   FreighterUnavailableError,
-  openFreighterInstallPage,
   readFreighterConnection,
 } from '@/lib/freighter'
 
@@ -21,7 +20,9 @@ import {
  * Maps a raw Freighter network id (e.g. `PUBLIC`, `TESTNET`) to the app's
  * `Network`. Returns `null` for ids we don't recognise (custom networks).
  */
-function toAppNetwork(freighterNetwork: string | null | undefined): Network | null {
+function toAppNetwork(
+  freighterNetwork: string | null | undefined
+): Network | null {
   if (!freighterNetwork) return null
   switch (freighterNetwork.toUpperCase()) {
     case 'PUBLIC':
@@ -150,8 +151,10 @@ export default function FreighterConnect({
       onConnect?.(session.publicKey)
     } catch (err) {
       if (err instanceof FreighterUnavailableError) {
+        // Don't auto-open the install page: this runs after an awaited probe,
+        // outside the click's user-activation window, so browsers block it.
+        // The inline "Install Freighter" link below is the user-initiated path.
         setMissingExtension(true)
-        openFreighterInstallPage()
       }
       setError(err instanceof Error ? err.message : 'Connection rejected')
     } finally {
@@ -167,21 +170,15 @@ export default function FreighterConnect({
     setUserDisconnectedState(true)
     publish(null)
     setNetwork(null)
-    onDisconnect?.()
-  }
-
-  const handleInstallClick = () => {
-    const onFocusBack = () => {
-      window.removeEventListener('focus', onFocusBack)
-      readFreighterConnection()
-        .then((connection) => {
-          if (connection?.publicKey) setMissingExtension(false)
-        })
-        .catch(() => {
-          // Ignore re-check errors
-        })
+    // Clear the window global too, so nothing reading it still sees the old
+    // public key after disconnecting. Guarded: the property may not be
+    // configurable in every environment.
+    try {
+      delete (window as { __freighterPublicKey?: string }).__freighterPublicKey
+    } catch {
+      // Ignore non-configurable property errors
     }
-    window.addEventListener('focus', onFocusBack)
+    onDisconnect?.()
   }
 
   if (!initialized) {
@@ -264,12 +261,18 @@ export default function FreighterConnect({
         Connect Freighter
       </button>
       {userDisconnected && !missingExtension ? (
-        <p className="mt-2 text-xs text-zinc-500" data-testid="freighter-revoke-hint">
+        <p
+          className="mt-2 text-xs text-zinc-500"
+          data-testid="freighter-revoke-hint"
+        >
           {FREIGHTER_REVOKE_HINT}
         </p>
       ) : null}
       {missingExtension ? (
-        <div className="mt-2 flex flex-col gap-1.5 text-xs text-zinc-400" role="alert">
+        <div
+          className="mt-2 flex flex-col gap-1.5 text-xs text-zinc-400"
+          role="alert"
+        >
           <p>
             Freighter not installed —{' '}
             <a

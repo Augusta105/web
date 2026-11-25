@@ -3,12 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { broadcastWalletChange, subscribeWallet } from '@/lib/walletEvents'
 import { setUserDisconnected } from '@/lib/disconnectFlag'
-import {
-  connectFreighter,
-  FreighterUnavailableError,
-  openFreighterInstallPage,
-  readFreighterConnection,
-} from '@/lib/freighter'
+import { connectFreighter, readFreighterConnection } from '@/lib/freighter'
 
 export interface FreighterState {
   publicKey: string | null
@@ -17,7 +12,24 @@ export interface FreighterState {
   error: string | null
 }
 
-export function useFreighter() {
+export interface UseFreighterResult extends FreighterState {
+  isConnected: boolean
+  connect: () => Promise<void>
+  disconnect: () => void
+  initialize: () => Promise<void>
+}
+
+/**
+ * Canonical wallet hook (issue #522).
+ *
+ * This is the single source of truth for Freighter connection state. It owns
+ * the public key, network, loading/error flags, and keeps localStorage and the
+ * `window.__freighterPublicKey` global in sync via `broadcastWalletChange`.
+ *
+ * `useFreighterConnection` and `useWallet` are thin wrappers around this hook
+ * and must not duplicate probe/subscribe logic.
+ */
+export function useFreighter(): UseFreighterResult {
   const [state, setState] = useState<FreighterState>({
     publicKey: null,
     network: null,
@@ -39,7 +51,11 @@ export function useFreighter() {
       }
       setState((prev) => ({ ...prev, loading: false }))
     } catch {
-      setState((prev) => ({ ...prev, loading: false, error: 'Failed to initialize Freighter' }))
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: 'Failed to initialize Freighter',
+      }))
     }
   }, [])
 
@@ -79,9 +95,6 @@ export function useFreighter() {
           })
       }
     } catch (err) {
-      if (err instanceof FreighterUnavailableError) {
-        openFreighterInstallPage()
-      }
       setState((prev) => ({
         ...prev,
         loading: false,
@@ -96,5 +109,11 @@ export function useFreighter() {
     setState({ publicKey: null, network: null, loading: false, error: null })
   }, [])
 
-  return { ...state, connect, disconnect, initialize }
+  return {
+    ...state,
+    isConnected: Boolean(state.publicKey),
+    connect,
+    disconnect,
+    initialize,
+  }
 }
