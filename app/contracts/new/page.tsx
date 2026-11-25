@@ -328,6 +328,9 @@ export default function NewContractPage() {
     return e
   }
 
+  // Derived from validate() so the Save button's enabled state and the
+  // save-time validation can never disagree (#523): any rule added to
+  // validate() is automatically enforced here too.
   function isFormValid(): boolean {
     return Object.keys(validate()).length === 0
   }
