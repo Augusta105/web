@@ -18,6 +18,7 @@ import {
   TEST_CONTRACT_ID,
 } from '@/lib/api'
 import WebhookTestButton from '@/components/WebhookTestButton'
+import {
   sendTestWebhook,
   type TestWebhookResult,
 } from '@/lib/api'
@@ -730,14 +731,6 @@ export default function NewContractPage() {
                 Generate
               </button>
               <CopyButton text={webhookSecret} />
-              <button
-                type="button"
-                onClick={() => setWebhookSecret(generateWebhookSecret())}
-                disabled={!webhookSecret}
-                className="px-3 py-2 rounded-lg border border-zinc-700 text-xs text-zinc-300 hover:text-zinc-100 disabled:opacity-50 transition-colors"
-              >
-                Rotate
-              </button>
             </div>
             <p id={webhookSecretHintId} className="text-xs text-zinc-500 mt-1">
               Deliveries are signed with this secret; it is never included in CSV exports.

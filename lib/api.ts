@@ -419,11 +419,6 @@ export async function sendTestWebhook(
         }),
         signal,
       })
-      // The proxy reports the receiver's status in its JSON; its own HTTP
-      // status is not the receiver's.
-      const data = (await proxyRes.json().catch(() => ({}))) as {
-        status?: number
-        ok?: boolean
       // The proxy answers with the receiver's status, timing and body snippet
       // as JSON; its own HTTP status is not the receiver's.
       const data = (await proxyRes.json().catch(() => ({}))) as {
@@ -436,7 +431,6 @@ export async function sendTestWebhook(
       return {
         status: typeof data.status === 'number' ? data.status : proxyRes.status,
         ok: data.ok === true,
-      }
         durationMs: data.durationMs,
         bodySnippet: data.bodySnippet ?? null,
         ...(data.error ? { error: data.error } : {}),
@@ -460,13 +454,6 @@ export async function sendTestWebhook(
     } catch {
       // The status is what matters; a body that can't be read is not an error.
     }
-
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      headers,
-      body,
-      signal,
-    })
 
     // The status is reported back rather than thrown on, so callers can show
     // the actual code; a non-2xx is still a failed delivery.
