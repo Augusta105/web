@@ -168,4 +168,28 @@ describe('parseImport', () => {
       functions: ['upgrade'],
     })
   })
+
+  it('validates restored alerts, drops unknown fields and counts skipped', () => {
+    const alert = {
+      label: 'A',
+      contract_id: CID,
+      network: 'testnet',
+      rule_triggered: 'AnyTransaction',
+      transaction_hash: 'abc',
+      timestamp: 1,
+      horizon_link: 'https://h',
+      extra: 'x',
+    }
+    const { transaction_hash: _omit, ...missingHash } = alert
+    const r = parseImport(
+      JSON.stringify({
+        version: 2,
+        contracts: [],
+        alerts: [alert, missingHash],
+      }),
+    )
+    expect(r.alerts).toHaveLength(1)
+    expect(r.alerts![0]).not.toHaveProperty('extra')
+    expect(r.skippedAlerts).toBe(1)
+  })
 })

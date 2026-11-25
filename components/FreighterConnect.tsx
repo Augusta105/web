@@ -128,8 +128,10 @@ export default function FreighterConnect({
       onConnect?.(session.publicKey)
     } catch (err) {
       if (err instanceof FreighterUnavailableError) {
+        // Don't auto-open the install page: this runs after an awaited probe,
+        // outside the click's user-activation window, so browsers block it.
+        // The inline "Install Freighter" link below is the user-initiated path.
         setMissingExtension(true)
-        openFreighterInstallPage()
       }
       setError(err instanceof Error ? err.message : 'Connection rejected')
     } finally {
@@ -143,6 +145,14 @@ export default function FreighterConnect({
   function disconnect() {
     publish(null)
     setNetwork(null)
+    // Clear the window global too, so nothing reading it still sees the old
+    // public key after disconnecting. Guarded: the property may not be
+    // configurable in every environment.
+    try {
+      delete (window as { __freighterPublicKey?: string }).__freighterPublicKey
+    } catch {
+      // Ignore non-configurable property errors
+    }
     onDisconnect?.()
   }
 

@@ -108,7 +108,8 @@ export function WebhookLogCard({
     txHref ??
     (data.contractAddress
       ? explorerContractUrl(network, data.contractAddress)
-      : null)
+      : null) ??
+    undefined
 
   return (
     <>
@@ -132,8 +133,11 @@ export function WebhookLogCard({
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span aria-label="Time" title={formatDateTime(data.timestamp)}>
-            {formatDateTime(data.timestamp)}
+          <span
+            aria-label="Time"
+            title={formatDateTime(new Date(data.timestamp).getTime())}
+          >
+            {formatDateTime(new Date(data.timestamp).getTime())}
           </span>
         </div>
 
@@ -159,7 +163,7 @@ export function WebhookLogCard({
           <div className="text-xs">
             <span className="text-muted-foreground">Tx: </span>
             <a
-              href={explorerTxUrl(network, data.txHash)}
+              href={explorerTxUrl(network, data.txHash) ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}

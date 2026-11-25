@@ -4,6 +4,11 @@ import WebhookLog from '@/components/WebhookLog'
 import { AlertPayload } from '@/types'
 import { formatRelativeTime } from '@/lib/format'
 
+let mockSearch = ''
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}))
+
 const explorerTxUrl = vi.fn(
   (network: string, hash: string) =>
     `https://stellar.expert/explorer/${network}/tx/${hash}`
@@ -33,6 +38,7 @@ const baseAlert: AlertPayload = {
 describe('WebhookLog', () => {
   beforeEach(() => {
     explorerTxUrl.mockClear()
+    mockSearch = ''
   })
 
   afterEach(() => {
@@ -222,14 +228,18 @@ describe('WebhookLog', () => {
 
     // Switch to the 24h range filter
     fireEvent.click(screen.getByRole('button', { name: /24h/i }))
-    expect(screen.queryByText('No matching alerts')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('No alerts match the selected filters.')
+    ).not.toBeInTheDocument()
 
     // Advance the clock by 2 minutes so the alert is now 24 h 1 min old.
     act(() => {
       vi.advanceTimersByTime(2 * 60 * 1000)
     })
 
-    expect(await screen.findByText('No matching alerts')).toBeInTheDocument()
+    expect(
+      screen.getByText('No alerts match the selected filters.')
+    ).toBeInTheDocument()
   })
 
   it('does not create a per-component interval', () => {
@@ -261,6 +271,17 @@ describe('WebhookLog', () => {
       expect(screen.getByText('26–30 of 30')).toBeInTheDocument()
       expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
     })
+  })
+
+  it('honors ?page= on initial render (issue #449)', () => {
+    mockSearch = 'page=2'
+    const manyAlerts: AlertPayload[] = Array.from({ length: 30 }, (_, i) => ({
+      ...baseAlert,
+      transaction_hash: `hash_${String(i).padStart(3, '0')}`,
+      timestamp: baseAlert.timestamp + i * 1000,
+    }))
+    render(<WebhookLog alerts={manyAlerts} network="testnet" />)
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
   })
 
   describe('alert CSV export (issue #232)', () => {

@@ -43,4 +43,21 @@ describe('RuleBuilder LargeTransfer threshold validation', () => {
       expect.objectContaining({ type: 'LargeTransfer', threshold_xlm: 1e-7 }),
     ])
   })
+
+  it('saves a tiny threshold unchanged after Edit', () => {
+    const onChange = vi.fn()
+    render(
+      <RuleBuilder
+        rules={[{ type: 'LargeTransfer', threshold_xlm: 1e-7 }]}
+        onChange={onChange}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+    expect(screen.getByPlaceholderText(/e\.g\. 10000/i)).toHaveValue('0.0000001')
+    fireEvent.click(screen.getByRole('button', { name: /save rule/i }))
+    expect(screen.queryByText(/plain decimal number/i)).not.toBeInTheDocument()
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ type: 'LargeTransfer', threshold_xlm: 1e-7 }),
+    ])
+  })
 })
