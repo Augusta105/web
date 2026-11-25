@@ -36,6 +36,13 @@ interface WalletChangeDetail {
 let walletChannel: BroadcastChannel | null = null
 let lastKnownPublicKey: string | null | undefined
 
+/**
+ * Number of live subscribers sharing `walletChannel`. The channel is only
+ * closed once this drops to zero, so one component unmounting does not tear
+ * the port out from under the others.
+ */
+let walletChannelSubscribers = 0
+
 function getWalletChannel(): BroadcastChannel | null {
   if (typeof BroadcastChannel === 'undefined') return null
   if (!walletChannel) {
@@ -118,8 +125,9 @@ if (typeof window !== 'undefined') {
  * returned straight from a `useEffect`.
  *
  * Listens to the same-tab CustomEvent and, when available, to the cross-tab
- * `BroadcastChannel`. The channel is closed on unsubscribe so a torn-down
- * subscriber does not keep the port (and its message queue) alive.
+ * `BroadcastChannel`. The shared channel is reference-counted: it is closed
+ * only when the last subscriber unsubscribes, so a torn-down component does
+ * not cut off the remaining listeners.
  */
 export function subscribeWallet(
   listener: (publicKey: string | null) => void
@@ -143,18 +151,27 @@ export function subscribeWallet(
 
   if (channel) {
     channel.addEventListener('message', channelHandler)
+    walletChannelSubscribers += 1
   }
 
+  let unsubscribed = false
+
   return () => {
+    if (unsubscribed) return
+    unsubscribed = true
+
     window.removeEventListener(WALLET_EVENT, handler)
     if (channel) {
       channel.removeEventListener('message', channelHandler)
-      try {
-        channel.close()
-      } catch {
-        // Already closed.
+      walletChannelSubscribers = Math.max(0, walletChannelSubscribers - 1)
+      if (walletChannelSubscribers === 0) {
+        try {
+          channel.close()
+        } catch {
+          // Already closed.
+        }
+        if (walletChannel === channel) walletChannel = null
       }
-      if (walletChannel === channel) walletChannel = null
     }
   }
 }

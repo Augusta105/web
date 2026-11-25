@@ -12,6 +12,16 @@
  *    reported as "extension unavailable".
  * 2. Errors are returned as an `error` field on the resolved value rather than
  *    thrown, so they are converted into thrown errors here.
+ *
+ * Security note (issue #521): connecting trusts whatever the wallet reports.
+ * `requestAccess()` / `getAddress()` return a public key, and that key is
+ * treated as proof that the user controls the wallet — there is no
+ * signed-challenge step, so the app never cryptographically verifies ownership.
+ * For a monitoring tool with no fund custody this is acceptable. If any future
+ * feature ties permissions (e.g. who may edit a contract's rules) to wallet
+ * identity, it MUST implement a signed-challenge auth flow (server-issued
+ * nonce, signed via `signWithFreighter`, verified before granting access)
+ * rather than relying on the public key alone.
  */
 
 import {
@@ -23,6 +33,7 @@ import {
 } from '@stellar/freighter-api'
 
 import type { Network } from '@/types'
+import { clearUserDisconnected, isUserDisconnected } from '@/lib/disconnectFlag'
 
 const FREIGHTER_INSTALL_URL = 'https://www.freighter.app/'
 
@@ -104,11 +115,21 @@ export class FreighterTimeoutError extends Error {
   }
 }
 
+/**
+ * Result of a connect flow.
+ *
+ * TODO(#521): `publicKey` is unverified — it is whatever the wallet reported,
+ * not proof of ownership. See the module security note before using it for
+ * authorisation.
+ */
 export interface FreighterSession {
   publicKey: string
-  /** Freighter network id, e.g. `"TESTNET"`. */
-  network: string
-  networkPassphrase: string
+  /**
+   * Freighter network id, e.g. `"TESTNET"`. `null` when the approved wallet did
+   * not report its network in time; callers should re-read it asynchronously.
+   */
+  network: string | null
+  networkPassphrase: string | null
 }
 
 function withTimeout<T>(
@@ -224,6 +245,13 @@ async function readNetworkDetails(): Promise<{
  * `publicKey` is null when the extension is installed but locked/not approved.
  */
 async function probeFreighterConnection(): Promise<FreighterConnection> {
+  // The user disconnected in-app: the site is still approved in Freighter, so
+  // probing would silently reconnect them. Report "disconnected" until they
+  // press Connect again.
+  if (isUserDisconnected()) {
+    return { publicKey: null, network: null, networkPassphrase: null }
+  }
+
   let connected = false
   try {
     const result = await withTimeout(isConnected())
@@ -282,7 +310,14 @@ export function readFreighterConnection(): Promise<FreighterConnection> {
   return probe
 }
 
-/** Explicit connect flow — prompts the user to approve this site. */
+/**
+ * Explicit connect flow — prompts the user to approve this site.
+ *
+ * TODO(#521): this only proves the wallet is reachable and approved for this
+ * site; it does not verify ownership of the returned public key (no
+ * signed-challenge step). Do not gate permissions on `publicKey` until a
+ * signed-challenge auth flow is implemented — see the module security note.
+ */
 export async function connectFreighter(): Promise<FreighterSession> {
   if (!(await isExtensionAvailable())) {
     throw new FreighterUnavailableError()
@@ -306,6 +341,8 @@ export async function connectFreighter(): Promise<FreighterSession> {
       throw new FreighterRejectedError()
     }
     address = result.address
+    // An explicit Connect ends the user's earlier in-app disconnect.
+    clearUserDisconnected()
   } catch (error) {
     if (
       error instanceof FreighterRejectedError ||
@@ -319,8 +356,15 @@ export async function connectFreighter(): Promise<FreighterSession> {
     )
   }
 
-  const details = await readNetworkDetails()
-  return { publicKey: address, ...details }
+  // The user has already approved at this point, so a failing or slow
+  // getNetworkDetails must not be reported as "Freighter not installed".
+  // Return the session without a network; the caller re-reads it later.
+  try {
+    const details = await readNetworkDetails()
+    return { publicKey: address, ...details }
+  } catch {
+    return { publicKey: address, network: null, networkPassphrase: null }
+  }
 }
 
 /**

@@ -6,9 +6,13 @@ import NetworkBadge from '@/components/NetworkBadge'
 import { subscribeWallet } from '@/lib/walletEvents'
 import type { Network } from '@/types'
 import {
+  FREIGHTER_REVOKE_HINT,
+  isUserDisconnected,
+  setUserDisconnected,
+} from '@/lib/disconnectFlag'
+import {
   connectFreighter,
   FreighterUnavailableError,
-  openFreighterInstallPage,
   readFreighterConnection,
 } from '@/lib/freighter'
 
@@ -56,6 +60,11 @@ export default function FreighterConnect({
   const [error, setError] = useState<string | null>(null)
   const [missingExtension, setMissingExtension] = useState(false)
   const installFocusListenerRef = useRef<(() => void) | null>(null)
+  const [userDisconnected, setUserDisconnectedState] = useState(false)
+
+  useEffect(() => {
+    setUserDisconnectedState(isUserDisconnected())
+  }, [])
 
   // Held in a ref rather than listed as a dependency: callers commonly pass an
   // inline arrow, which changes identity on every parent render. Depending on it
@@ -125,13 +134,27 @@ export default function FreighterConnect({
     try {
       setMissingExtension(false)
       const session = await connectFreighter()
+      setUserDisconnectedState(false)
       publish(session.publicKey)
       setNetwork(session.network ?? null)
+      if (!session.network) {
+        // Network details were slow or failed after approval: re-read them in
+        // the background instead of blocking or failing the connection.
+        void readFreighterConnection()
+          .then((connection) => {
+            if (connection?.network) setNetwork(connection.network)
+          })
+          .catch(() => {
+            // Leave the network unknown; the watcher will refresh it.
+          })
+      }
       onConnect?.(session.publicKey)
     } catch (err) {
       if (err instanceof FreighterUnavailableError) {
+        // Don't auto-open the install page: this runs after an awaited probe,
+        // outside the click's user-activation window, so browsers block it.
+        // The inline "Install Freighter" link below is the user-initiated path.
         setMissingExtension(true)
-        openFreighterInstallPage()
       }
       setError(err instanceof Error ? err.message : 'Connection rejected')
     } finally {
@@ -143,8 +166,18 @@ export default function FreighterConnect({
   // of the session. Nothing is persisted: the wallet is the source of truth, so
   // a key cached in localStorage would outlive an account switch in Freighter.
   function disconnect() {
+    setUserDisconnected()
+    setUserDisconnectedState(true)
     publish(null)
     setNetwork(null)
+    // Clear the window global too, so nothing reading it still sees the old
+    // public key after disconnecting. Guarded: the property may not be
+    // configurable in every environment.
+    try {
+      delete (window as { __freighterPublicKey?: string }).__freighterPublicKey
+    } catch {
+      // Ignore non-configurable property errors
+    }
     onDisconnect?.()
   }
 
@@ -250,6 +283,14 @@ export default function FreighterConnect({
         )}
         Connect Freighter
       </button>
+      {userDisconnected && !missingExtension ? (
+        <p
+          className="mt-2 text-xs text-zinc-500"
+          data-testid="freighter-revoke-hint"
+        >
+          {FREIGHTER_REVOKE_HINT}
+        </p>
+      ) : null}
       {missingExtension ? (
         <div
           className="mt-2 flex flex-col gap-1.5 text-xs text-zinc-400"

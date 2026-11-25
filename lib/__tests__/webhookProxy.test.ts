@@ -22,11 +22,15 @@ vi.mock('node:dns', () => ({
 
 import {
   BlockedAddressError,
-  createRateLimiter,
   deliverWebhook,
   resolvePublicAddresses,
   vettedLookup,
 } from '../webhookProxy'
+import {
+  createRateLimiter,
+  type RateLimitStore,
+  type RateLimitWindow,
+} from '../rateLimit'
 
 const lookup = (host: string, options: { all?: boolean; family?: number }) =>
   new Promise<{ err: Error | null; address: unknown }>((resolve) =>
@@ -104,12 +108,34 @@ describe('deliverWebhook', () => {
 })
 
 describe('createRateLimiter', () => {
-  it('allows `limit` requests per window per key', () => {
+  it('allows `limit` requests per window per key', async () => {
     const limit = createRateLimiter(2, 60000)
-    expect(limit('a', 0).allowed).toBe(true)
-    expect(limit('a', 1).allowed).toBe(true)
-    expect(limit('a', 2)).toEqual({ allowed: false, retryAfterMs: 59998 })
-    expect(limit('b', 2).allowed).toBe(true)
-    expect(limit('a', 60000).allowed).toBe(true)
+    expect((await limit('a', 0)).allowed).toBe(true)
+    expect((await limit('a', 1)).allowed).toBe(true)
+    expect(await limit('a', 2)).toEqual({ allowed: false, retryAfterMs: 59998 })
+    expect((await limit('b', 2)).allowed).toBe(true)
+    expect((await limit('a', 60000)).allowed).toBe(true)
+  })
+
+  it('delegates counting to a pluggable store', async () => {
+    // A store shared by two limiter instances, as in a multi-instance deploy.
+    const counts = new Map<string, RateLimitWindow>()
+    const shared: RateLimitStore = {
+      async hit(key, windowMs, now) {
+        const w = counts.get(key)
+        if (!w || now - w.windowStart >= windowMs) {
+          const fresh = { count: 1, windowStart: now }
+          counts.set(key, fresh)
+          return fresh
+        }
+        w.count += 1
+        return { ...w }
+      },
+    }
+    const instanceA = createRateLimiter(2, 60000, shared)
+    const instanceB = createRateLimiter(2, 60000, shared)
+    expect((await instanceA('ip', 0)).allowed).toBe(true)
+    expect((await instanceB('ip', 1)).allowed).toBe(true)
+    expect((await instanceA('ip', 2)).allowed).toBe(false)
   })
 })
